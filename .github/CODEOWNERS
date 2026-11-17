@@ -1,0 +1,49 @@
+# Who must review what. Replace each placeholder with "@" plus that person's
+# GitHub username. Later lines win over earlier ones.
+#
+#   P1 = Materials and fabric tracking  (requirements 3 and 6)
+#   P2 = 2D editor and touch            (requirements 4 and 5)
+#   P3 = 3D preview and project output  (requirement 7, Cutting Plan, save)
+#
+# GitHub only enforces this once "Require review from Code Owners" is turned on
+# in the branch protection rule for main.
+
+# Default: any one owner
+*                                   P1_USERNAME P2_USERNAME P3_USERNAME
+
+# ---- P1
+/app/new-garment.tsx                P1_USERNAME
+/app/garment-map.tsx                P1_USERNAME
+/app/start.tsx                      P1_USERNAME
+/app/patterns.tsx                   P1_USERNAME
+/src/intake/                        P1_USERNAME
+/src/features/tracker/              P1_USERNAME
+/src/state/handlers/sources.ts      P1_USERNAME
+/src/state/handlers/inventory.ts    P1_USERNAME
+/src/state/selectors.ts             P1_USERNAME
+
+# ---- P2
+/app/studio.tsx                     P2_USERNAME
+/src/features/studio/               P2_USERNAME
+/src/state/handlers/edits.ts        P2_USERNAME
+/src/geometry/                      P2_USERNAME
+
+# ---- P3 (clip.ts overrides the geometry/ line above)
+/app/cutting-plan.tsx               P3_USERNAME
+/src/features/preview3d/            P3_USERNAME
+/src/features/cutting-plan/         P3_USERNAME
+/src/storage/                       P3_USERNAME
+/src/geometry/clip.ts               P3_USERNAME
+
+# ---- Shared contracts: all three must approve
+/src/model/                         P1_USERNAME P2_USERNAME P3_USERNAME
+/src/fixtures/                      P1_USERNAME P2_USERNAME P3_USERNAME
+/src/state/actions.ts               P1_USERNAME P2_USERNAME P3_USERNAME
+/src/state/reducer.ts               P1_USERNAME P2_USERNAME P3_USERNAME
+/src/state/ProjectContext.tsx       P1_USERNAME P2_USERNAME P3_USERNAME
+/src/storage/paths.ts               P1_USERNAME P2_USERNAME P3_USERNAME
+/src/theme/                         P1_USERNAME P2_USERNAME P3_USERNAME
+/app/_layout.tsx                    P1_USERNAME P2_USERNAME P3_USERNAME
+/package.json                       P1_USERNAME P2_USERNAME P3_USERNAME
+/package-lock.json                  P1_USERNAME P2_USERNAME P3_USERNAME
+/app.json                           P1_USERNAME P2_USERNAME P3_USERNAME
