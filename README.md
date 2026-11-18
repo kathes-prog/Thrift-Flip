@@ -17,8 +17,14 @@ npm run check   # typecheck + lint + format check + tests. Run before every PR.
 
 **Run it in the iOS Simulator.** The first time only, you need:
 
-1. Xcode, with the iOS Simulator runtime downloaded (Xcode → Settings → Components → iOS).
-2. CocoaPods: `brew install cocoapods`.
+1. **Xcode 26 or newer** from the App Store. Expo SDK 58 needs Swift 6.2; older Xcode fails with "Swift tools version 6.2.0 but the installed version is 6.1.0".
+2. Accept the Xcode license and finish its setup. You need to do this again after every Xcode update, or Xcode tools (even `git`) stop with "You have not agreed to the Xcode license":
+   ```bash
+   sudo xcodebuild -license
+   sudo xcodebuild -runFirstLaunch
+   ```
+3. An iOS Simulator runtime: Xcode → Settings → Components → iOS, or `xcodebuild -downloadPlatform iOS` (about 9 GB).
+4. CocoaPods: `brew install cocoapods`.
 
 Then:
 
@@ -40,15 +46,14 @@ You should see **Hello World**. From there:
 
 Everyone owns whole acceptance requirements, so you can demo your part on the phone without waiting for the others.
 
-|                      | Person 1                                                   | Person 2                             | Person 3                                |
+|                      | Zoe (Person 1)                                             | Katherine (Person 2)                 | Mario (Person 3)                        |
 | -------------------- | ---------------------------------------------------------- | ------------------------------------ | --------------------------------------- |
 | **Role**             | Materials and fabric tracking                              | 2D editor and touch                  | 3D preview and project output           |
-| **Name**             | _TBD_                                                      | _TBD_                                | _TBD_                                   |
 | **Requirements**     | 3 (material intake), 6 (fabric tracking)                   | 4 (2D canvas), 5 (touch and cutting) | 7 (3D preview), Cutting Plan, save      |
 | **Screens**          | New Garment, Garment Map, Start Designing, Pattern Library | Design Studio                        | Cutting Plan, the 3D view inside Studio |
 | **Test with preset** | `jeans`, `jeans-second`, `jeans-scrap`                     | `studio-both`, `skirt-a`             | `skirt-a`, `skirt-b`                    |
 
-### Person 1 · Materials and fabric tracking
+### Zoe (Person 1) · Materials and fabric tracking
 
 **You build:** photo intake for both garments and measured scraps, the inventory rules (place, store, restore, discard), the tracker numbers and pattern shortage warnings.
 
@@ -63,13 +68,13 @@ Everyone owns whole acceptance requirements, so you can demo your part on the ph
 | `src/state/handlers/sources.ts`          | `ADD_GARMENT`, `ADD_SCRAP`, `SELECT_MODE`                          |
 | `src/state/handlers/inventory.ts`        | `PLACE_PIECE`, `STORE_PIECE`, `RESTORE_PIECE`, `DISCARD_PIECE`     |
 | `src/state/selectors.ts`                 | `selectTracker`, `selectPatternFit`                                |
-| `src/features/tracker/FabricTracker.tsx` | Tracker card (Person 2 places it in Studio)                        |
+| `src/features/tracker/FabricTracker.tsx` | Tracker card (Katherine places it in Studio)                       |
 
 **Your tests:** `src/state/__tests__/tracking.spec.test.ts` and `src/intake/__tests__/scrap.spec.test.ts`
 
 **Start here:** `selectors.ts` and `inventory.ts`. They are pure functions, and your tests already spell out the expected numbers (11,856 cm², 644 short, 44 short, the pocket sequence).
 
-### Person 2 · 2D editor and touch
+### Katherine (Person 2) · 2D editor and touch
 
 **You build:** the SVG canvas, tapping and dragging pieces, rotate, flip, recolour, the straight-line cut, and the tray. Undo is already built.
 
@@ -84,9 +89,9 @@ Everyone owns whole acceptance requirements, so you can demo your part on the ph
 
 **Your tests:** `src/geometry/__tests__/geometry.spec.test.ts` and `src/state/__tests__/edits.spec.test.ts`
 
-**Start here:** the `geometry/` functions. Person 3's clipping depends on `pieceToDesign`, so finish transforms early.
+**Start here:** the `geometry/` functions. Mario's clipping depends on `pieceToDesign`, so finish transforms early.
 
-### Person 3 · 3D preview and project output
+### Mario (Person 3) · 3D preview and project output
 
 **You build:** the rotatable 3D skirt showing the pieces placed in 2D, the Cutting Plan summary, and saving and reopening the project.
 
@@ -108,57 +113,57 @@ Everyone owns whole acceptance requirements, so you can demo your part on the ph
 
 ```
 app/                              Screens (expo-router: one file = one route)
-├── _layout.tsx                   Shared   Stack navigator, fonts, ProjectProvider
-├── index.tsx                     Shared   Hello World + links (requirement 1)
-├── new-garment.tsx               P1
-├── garment-map.tsx               P1
-├── start.tsx                     P1
-├── patterns.tsx                  P1
-├── studio.tsx                    P2
-├── cutting-plan.tsx              P3
+├── _layout.tsx                   Shared     Stack navigator, fonts, ProjectProvider
+├── index.tsx                     Shared     Hello World + links (requirement 1)
+├── new-garment.tsx               Zoe
+├── garment-map.tsx               Zoe
+├── start.tsx                     Zoe
+├── patterns.tsx                  Zoe
+├── studio.tsx                    Katherine
+├── cutting-plan.tsx              Mario
 └── dev/
-    ├── styles.tsx                Shared   Hello Styles (requirement 2)
-    └── fixtures.tsx              Shared   Load test projects
+    ├── styles.tsx                Shared     Hello Styles (requirement 2)
+    └── fixtures.tsx              Shared     Load test projects
 
 src/
-├── model/                        Shared   The data model. Read this first.
-│   ├── types.ts                           Project, MaterialSource, FabricPiece, Pattern
-│   └── units.ts                           Point, Polygon; all geometry is in cm
-├── fixtures/                     Shared   Demo data from the build plan
-│   ├── jeans.ts                           10 pieces, 11,856 cm²
-│   ├── secondGarment.ts                   +600 cm² garment, 30 × 30 cm scrap
-│   ├── patterns.ts                        Tote, cropped top, skirt + guide regions
-│   └── presets.ts                         Whole test projects for Dev fixtures
+├── model/                        Shared     The data model. Read this first.
+│   ├── types.ts                             Project, MaterialSource, FabricPiece, Pattern
+│   └── units.ts                             Point, Polygon; all geometry is in cm
+├── fixtures/                     Shared     Demo data from the build plan
+│   ├── jeans.ts                             10 pieces, 11,856 cm²
+│   ├── secondGarment.ts                     +600 cm² garment, 30 × 30 cm scrap
+│   ├── patterns.ts                          Tote, cropped top, skirt + guide regions
+│   └── presets.ts                           Whole test projects for Dev fixtures
 ├── state/
-│   ├── actions.ts                Shared   Every action the app can dispatch
-│   ├── reducer.ts                Shared   Routes actions to handlers; undo history
-│   ├── ProjectContext.tsx        Shared   useProject() hook
-│   ├── selectors.ts              P1       Tracker totals, pattern shortage
+│   ├── actions.ts                Shared     Every action the app can dispatch
+│   ├── reducer.ts                Shared     Routes actions to handlers; undo history
+│   ├── ProjectContext.tsx        Shared     useProject() hook
+│   ├── selectors.ts              Zoe        Tracker totals, pattern shortage
 │   └── handlers/
-│       ├── sources.ts            P1
-│       ├── inventory.ts          P1
-│       └── edits.ts              P2
-├── geometry/                     Pure maths, no React
-│   ├── area.ts                   P2
-│   ├── transform.ts              P2
-│   ├── cut.ts                    P2
-│   └── clip.ts                   P3
-├── intake/                       P1       Photos, scrap form
+│       ├── sources.ts            Zoe
+│       ├── inventory.ts          Zoe
+│       └── edits.ts              Katherine
+├── geometry/                     Pure math  s, no React
+│   ├── area.ts                   Katherine
+│   ├── transform.ts              Katherine
+│   ├── cut.ts                    Katherine
+│   └── clip.ts                   Mario
+├── intake/                       Zoe        Photos, scrap form
 ├── storage/
-│   ├── paths.ts                  Shared   Where files live on the phone
-│   └── projectStore.ts           P3       Save / load
+│   ├── paths.ts                  Shared     Where files live on the phone
+│   └── projectStore.ts           Mario      Save / load
 ├── features/
-│   ├── tracker/                  P1       <FabricTracker />
-│   ├── studio/                   P2       <StudioCanvas />
-│   ├── preview3d/                P3       <SkirtPreview />
-│   └── cutting-plan/             P3       <CuttingPlanSummary />
-├── components/                   Shared   AppText, Button, Card, Screen, StubBanner
-├── theme/                        Shared   Colours, fonts, icons
-├── testUtils.ts                  Shared   preset(), applyAll(), shoelace()
-└── todo.ts                       Shared   todo() helper used by stubs
+│   ├── tracker/                  Zoe        <FabricTracker />
+│   ├── studio/                   Katherine  <StudioCanvas />
+│   ├── preview3d/                Mario      <SkirtPreview />
+│   └── cutting-plan/             Mario      <CuttingPlanSummary />
+├── components/                   Shared     AppText, Button, Card, Screen, StubBanner
+├── theme/                        Shared     Colours, fonts, icons
+├── testUtils.ts                  Shared     preset(), applyAll(), shoelace()
+└── todo.ts                       Shared     todo() helper used by stubs
 ```
 
-Unfinished code is easy to spot. Stub functions throw `TODO(P1)`, `TODO(P2)` or `TODO(P3)`, and unfinished screens show a dashed orange **STUB** banner. Delete the banner when your part is done.
+Unfinished code is easy to spot. Stub functions throw `TODO(P1)` (Zoe), `TODO(P2)` (Katherine) or `TODO(P3)` (Mario), and unfinished screens show a dashed orange **STUB** banner. Delete the banner when your part is done.
 
 ---
 
@@ -182,12 +187,12 @@ Screen ──dispatch(action)──▶ reducer.ts ──▶ handlers/{sources,in
 
 ### Where people's work meets
 
-| Between | Agreement                                                                                                                                                 |
-| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P1 ↔ P2 | P2's canvas dispatches `PLACE_PIECE`, and P1's handler decides whether it's allowed. P2 places P1's `<FabricTracker />` in Studio.                        |
-| P1 ↔ P2 | Cut fragments keep the parent's status, `sourceId` and `originalPieceId`, and split its area by polygon area. P1's tracker must still add up after a cut. |
-| P2 ↔ P3 | P3's clipping uses P2's `pieceToDesign()`. Both use the region IDs in `fixtures/patterns.ts`.                                                             |
-| P1 ↔ P3 | P1 saves photo paths as `images/<uuid>.jpg`. P3 saves and reloads them as they are.                                                                       |
+| Between           | Agreement                                                                                                                                                  |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Zoe ↔ Katherine   | Katherine's canvas dispatches `PLACE_PIECE`, and Zoe's handler decides whether it's allowed. Katherine places Zoe's `<FabricTracker />` in Studio.         |
+| Zoe ↔ Katherine   | Cut fragments keep the parent's status, `sourceId` and `originalPieceId`, and split its area by polygon area. Zoe's tracker must still add up after a cut. |
+| Katherine ↔ Mario | Mario's clipping uses Katherine's `pieceToDesign()`. Both use the region IDs in `fixtures/patterns.ts`.                                                    |
+| Zoe ↔ Mario       | Zoe saves photo paths as `images/<uuid>.jpg`. Mario saves and reloads them as they are.                                                                    |
 
 ---
 
