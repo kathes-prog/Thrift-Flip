@@ -1,6 +1,9 @@
 /**
  * Owner: P2. Arrange, cut and manage pieces in 2D; switch to the 3D preview
  * (P3's component) for the skirt. Places P1's <FabricTracker />.
+ *
+ * Tapping a tray piece sends PLACE_PIECE; P1's inventory handler decides
+ * whether it may go on the canvas (e.g. a third jeans pocket is rejected).
  */
 import { router } from 'expo-router';
 import { useState } from 'react';
@@ -9,8 +12,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { AppText } from '@/components/AppText';
 import { Button } from '@/components/Button';
 import { Screen } from '@/components/Screen';
-import { StubBanner } from '@/components/StubBanner';
-import { getPattern } from '@/fixtures/patterns';
+import { FREESTYLE_CANVAS, getPattern } from '@/fixtures/patterns';
 import { SkirtPreview } from '@/features/preview3d/SkirtPreview';
 import { newFragmentIds } from '@/features/studio/ids';
 import { PIECE_COLORS } from '@/features/studio/palette';
@@ -18,10 +20,11 @@ import { StudioCanvas } from '@/features/studio/StudioCanvas';
 import { ToolButton } from '@/features/studio/ToolButton';
 import { FabricTracker } from '@/features/tracker/FabricTracker';
 import { formatArea, type Point } from '@/model/units';
-import type { CutPieceAction } from '@/state/actions';
+import type { FabricPiece } from '@/model/types';
+import type { CutPieceAction, PlacePieceAction } from '@/state/actions';
 import { useProject } from '@/state/ProjectContext';
 import { applyProjectAction } from '@/state/reducer';
-import { colors, radii, spacing } from '@/theme';
+import { colors, Icon, radii, spacing } from '@/theme';
 
 /** Each tap of Rotate turns the selected piece this far clockwise. */
 const ROTATE_STEP_DEG = 90;
@@ -64,16 +67,29 @@ export default function Studio() {
   };
   const pattern = project.mode?.kind === 'pattern' ? getPattern(project.mode.patternId) : undefined;
   const tray = project.pieces.filter((p) => p.status === 'tray');
+  const canvas = pattern?.canvas ?? FREESTYLE_CANVAS;
+
+  const place = (piece: FabricPiece) => {
+    const action: PlacePieceAction = {
+      type: 'PLACE_PIECE',
+      pieceId: piece.id,
+      position: { x: canvas.widthCm / 2, y: canvas.heightCm / 2 },
+    };
+    if (applyProjectAction(project, action) === project) {
+      setNotice(`${piece.displayName} can't go on the canvas.`);
+      return;
+    }
+    dispatch(action);
+    setSelectedId(piece.id);
+    setCutMode(false);
+    setNotice(null);
+  };
 
   return (
     // The canvas must own its pan gestures, so it stays fixed at the top and
     // only the panel underneath it scrolls.
     <Screen scroll={false}>
       <View style={styles.fixed}>
-        <StubBanner
-          owner="P2"
-          note="Pieces on canvas, tray placement, move / rotate / flip / cut tools."
-        />
         <AppText variant="heading">
           {pattern ? pattern.name : project.mode?.kind === 'freestyle' ? 'Freestyle' : 'No design'}
         </AppText>
@@ -171,11 +187,18 @@ export default function Studio() {
         <AppText variant="heading">Tray</AppText>
         {tray.length === 0 ? <AppText color={colors.inkMuted}>Tray is empty.</AppText> : null}
         {tray.map((piece) => (
-          <View key={piece.id} style={styles.trayRow}>
+          <Pressable
+            key={piece.id}
+            accessibilityRole="button"
+            accessibilityLabel={`Add ${piece.displayName} to the canvas`}
+            onPress={() => place(piece)}
+            style={({ pressed }) => [styles.trayRow, pressed && styles.trayRowPressed]}
+          >
             <View style={[styles.dot, { backgroundColor: piece.color }]} />
             <AppText style={{ flex: 1 }}>{piece.displayName}</AppText>
             <AppText color={colors.inkMuted}>{formatArea(piece.areaCm2)}</AppText>
-          </View>
+            <Icon name="add" size={20} color={colors.primary} />
+          </Pressable>
         ))}
         <FabricTracker />
         <Button label="Cutting plan" icon="save" onPress={() => router.push('/cutting-plan')} />
@@ -203,6 +226,13 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   swatchChosen: { borderWidth: 3, borderColor: colors.selection },
-  trayRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  trayRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radii.sm,
+  },
+  trayRowPressed: { backgroundColor: colors.border },
   dot: { width: 12, height: 12, borderRadius: 6 },
 });
