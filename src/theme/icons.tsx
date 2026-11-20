@@ -18,6 +18,7 @@ export const iconNames = [
   'cut',
   'rotate',
   'flip',
+  'color',
   'undo',
   'store',
   'restore',
@@ -77,6 +78,18 @@ function glyph(name: IconName, s: StrokeProps) {
       return <Path d="M20 12a8 8 0 1 1-3-6.2M20 4v5h-5" {...s} />;
     case 'flip':
       return <Path d="M12 3v18M9 7L4 17h5zM15 7l5 10h-5z" {...s} />;
+    case 'color':
+      return (
+        <>
+          <Path
+            d="M12 3a9 9 0 0 0 0 18c1.5 0 2-1 2-2s-1-1.5-1-2.5 1-1.5 2-1.5h2a4 4 0 0 0 4-4c0-4.4-4-8-9-8z"
+            {...s}
+          />
+          <Circle cx={7.5} cy={11} r={1.2} {...s} />
+          <Circle cx={10} cy={7} r={1.2} {...s} />
+          <Circle cx={15} cy={7.5} r={1.2} {...s} />
+        </>
+      );
     case 'undo':
       return <Path d="M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3" {...s} />;
     case 'store':

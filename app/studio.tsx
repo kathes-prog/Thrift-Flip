@@ -4,7 +4,7 @@
  */
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/AppText';
 import { Button } from '@/components/Button';
@@ -12,11 +12,16 @@ import { Screen } from '@/components/Screen';
 import { StubBanner } from '@/components/StubBanner';
 import { getPattern } from '@/fixtures/patterns';
 import { SkirtPreview } from '@/features/preview3d/SkirtPreview';
+import { PIECE_COLORS } from '@/features/studio/palette';
 import { StudioCanvas } from '@/features/studio/StudioCanvas';
+import { ToolButton } from '@/features/studio/ToolButton';
 import { FabricTracker } from '@/features/tracker/FabricTracker';
 import { formatArea } from '@/model/units';
 import { useProject } from '@/state/ProjectContext';
-import { colors, spacing } from '@/theme';
+import { colors, radii, spacing } from '@/theme';
+
+/** Each tap of Rotate turns the selected piece this far clockwise. */
+const ROTATE_STEP_DEG = 90;
 
 export default function Studio() {
   const { project, dispatch, canUndo, undo } = useProject();
@@ -24,6 +29,7 @@ export default function Studio() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // A selection only counts while that piece is on the canvas (undo or a cut can remove it).
   const selected = project.pieces.find((p) => p.id === selectedId && p.status === 'canvas');
+  const [colorsOpen, setColorsOpen] = useState(false);
   const pattern = project.mode?.kind === 'pattern' ? getPattern(project.mode.patternId) : undefined;
   const tray = project.pieces.filter((p) => p.status === 'tray');
 
@@ -39,7 +45,7 @@ export default function Studio() {
         <AppText variant="heading">
           {pattern ? pattern.name : project.mode?.kind === 'freestyle' ? 'Freestyle' : 'No design'}
         </AppText>
-        <View style={styles.toolbar}>
+        <View style={styles.viewToggle}>
           <Button
             label="2D"
             variant={view === '2d' ? 'primary' : 'secondary'}
@@ -52,7 +58,6 @@ export default function Studio() {
             disabled={!pattern?.has3dPreview}
             onPress={() => setView('3d')}
           />
-          <Button label="Undo" icon="undo" variant="secondary" disabled={!canUndo} onPress={undo} />
         </View>
         {view === '2d' ? (
           <StudioCanvas
@@ -65,6 +70,53 @@ export default function Studio() {
         ) : (
           <SkirtPreview project={project} />
         )}
+        <View style={styles.tools}>
+          <ToolButton label="Undo" icon="undo" disabled={!canUndo} onPress={undo} />
+          <ToolButton
+            label="Rotate"
+            icon="rotate"
+            disabled={!selected}
+            onPress={() =>
+              selected &&
+              dispatch({
+                type: 'ROTATE_PIECE',
+                pieceId: selected.id,
+                rotationDeg: selected.rotationDeg + ROTATE_STEP_DEG,
+              })
+            }
+          />
+          <ToolButton
+            label="Colour"
+            icon="color"
+            disabled={!selected}
+            active={Boolean(selected) && colorsOpen}
+            onPress={() => setColorsOpen((open) => !open)}
+          />
+          <ToolButton
+            label="Flip"
+            icon="flip"
+            disabled={!selected}
+            onPress={() => selected && dispatch({ type: 'FLIP_PIECE', pieceId: selected.id })}
+          />
+        </View>
+        {selected && colorsOpen ? (
+          <View style={styles.swatches}>
+            {PIECE_COLORS.map((color) => (
+              <Pressable
+                key={color}
+                accessibilityRole="button"
+                accessibilityLabel={`Colour ${color}`}
+                accessibilityState={{ selected: selected.color === color }}
+                onPress={() => dispatch({ type: 'RECOLOR_PIECE', pieceId: selected.id, color })}
+                style={[
+                  styles.swatch,
+                  { backgroundColor: color },
+                  selected.color === color && styles.swatchChosen,
+                ]}
+              />
+            ))}
+          </View>
+        ) : null}
       </View>
       <ScrollView style={styles.panel} contentContainerStyle={styles.panelContent}>
         <AppText variant="heading">Tray</AppText>
@@ -87,7 +139,21 @@ const styles = StyleSheet.create({
   fixed: { padding: spacing.md, paddingBottom: spacing.sm, gap: spacing.sm },
   panel: { flex: 1 },
   panelContent: { paddingHorizontal: spacing.md, paddingBottom: spacing.md, gap: spacing.md },
-  toolbar: { flexDirection: 'row', gap: spacing.sm },
+  viewToggle: { flexDirection: 'row', gap: spacing.sm },
+  tools: { flexDirection: 'row', gap: spacing.xs },
+  swatches: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.xs,
+  },
+  swatch: {
+    width: 36,
+    height: 36,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  swatchChosen: { borderWidth: 3, borderColor: colors.selection },
   trayRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   dot: { width: 12, height: 12, borderRadius: 6 },
 });
