@@ -19,8 +19,11 @@ import { useProject } from '@/state/ProjectContext';
 import { colors, spacing } from '@/theme';
 
 export default function Studio() {
-  const { project, canUndo, undo } = useProject();
+  const { project, dispatch, canUndo, undo } = useProject();
   const [view, setView] = useState<'2d' | '3d'>('2d');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // A selection only counts while that piece is on the canvas (undo or a cut can remove it).
+  const selected = project.pieces.find((p) => p.id === selectedId && p.status === 'canvas');
   const pattern = project.mode?.kind === 'pattern' ? getPattern(project.mode.patternId) : undefined;
   const tray = project.pieces.filter((p) => p.status === 'tray');
 
@@ -52,7 +55,13 @@ export default function Studio() {
           <Button label="Undo" icon="undo" variant="secondary" disabled={!canUndo} onPress={undo} />
         </View>
         {view === '2d' ? (
-          <StudioCanvas mode={project.mode} pieces={project.pieces} />
+          <StudioCanvas
+            mode={project.mode}
+            pieces={project.pieces}
+            selectedId={selected?.id ?? null}
+            onSelect={setSelectedId}
+            onMove={(pieceId, position) => dispatch({ type: 'MOVE_PIECE', pieceId, position })}
+          />
         ) : (
           <SkirtPreview project={project} />
         )}

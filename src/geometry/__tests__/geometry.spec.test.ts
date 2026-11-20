@@ -1,6 +1,7 @@
 /** Owner: P2 · geometry with known inputs. Remove `.skip` as each part is built. */
 import { polygonArea } from '@/geometry/area';
 import { cutPolygon } from '@/geometry/cut';
+import { pieceAt, pointInPolygon } from '@/geometry/hitTest';
 import {
   designToLocal,
   designToScreen,
@@ -9,7 +10,7 @@ import {
   screenToDesign,
 } from '@/geometry/transform';
 import { rect } from '@/model/units';
-import { shoelace } from '@/testUtils';
+import { preset, shoelace } from '@/testUtils';
 
 describe('P2 · area', () => {
   test('rectangle and triangle', () => {
@@ -138,5 +139,60 @@ describe('P2 · extra geometry checks', () => {
     expect(polygonArea(a) + polygonArea(b)).toBeCloseTo(2_640);
     // A line through the centre of a rectangle splits it in half.
     expect(polygonArea(a)).toBeCloseTo(1_320);
+  });
+});
+
+describe('P2 · hit testing', () => {
+  test('a point inside, outside and beyond a square', () => {
+    const square = rect(10, 10);
+    expect(pointInPolygon({ x: 0, y: 0 }, square)).toBe(true);
+    expect(pointInPolygon({ x: 4.9, y: -4.9 }, square)).toBe(true);
+    expect(pointInPolygon({ x: 6, y: 0 }, square)).toBe(false);
+    expect(pointInPolygon({ x: 0, y: -20 }, square)).toBe(false);
+  });
+
+  test('a point inside a triangle but outside its bounding box corner', () => {
+    const triangle = [
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 0, y: 10 },
+    ];
+    expect(pointInPolygon({ x: 2, y: 2 }, triangle)).toBe(true);
+    expect(pointInPolygon({ x: 8, y: 8 }, triangle)).toBe(false);
+  });
+
+  test('finds the placed piece under a point, and nothing on empty canvas', () => {
+    // In skirt layout A, second-panel is a 20 × 20 square centred at (90, 35).
+    const pieces = preset('skirt-a').pieces;
+    expect(pieceAt(pieces, { x: 90, y: 35 })?.id).toBe('second-panel');
+    expect(pieceAt(pieces, { x: 99, y: 44 })?.id).toBe('second-panel');
+    expect(pieceAt(pieces, { x: 115, y: 75 })).toBeNull();
+  });
+
+  test('pieces in the tray are never hit', () => {
+    const pieces = preset('skirt-a').pieces.map((p) =>
+      p.id === 'second-panel' ? { ...p, status: 'tray' as const } : p,
+    );
+    expect(pieceAt(pieces, { x: 90, y: 35 })).toBeNull();
+  });
+
+  test('the piece drawn on top wins where two overlap', () => {
+    const pieces = preset('skirt-a').pieces.map((p) =>
+      p.id === 'jeans-pocket-l' ? { ...p, position: { x: 90, y: 35 } } : p,
+    );
+    const top = pieces.filter((p) => p.status === 'canvas').at(-1)!;
+    expect(pieceAt(pieces, { x: 90, y: 35 })?.id).toBe(top.id);
+  });
+
+  test('a rotated piece is hit along its turned outline', () => {
+    const pieces = preset('skirt-a').pieces.map((p) =>
+      p.id === 'jeans-yoke-l' ? { ...p, rotationDeg: 90 } : p,
+    );
+    const yoke = pieces.find((p) => p.id === 'jeans-yoke-l')!;
+    const outline = pieceToDesign(yoke);
+    const ys = outline.map((p) => p.y);
+    // Just inside the bottom of the turned yoke.
+    const point = { x: yoke.position.x, y: Math.max(...ys) - 0.5 };
+    expect(pieceAt(pieces, point)?.id).toBe('jeans-yoke-l');
   });
 });
