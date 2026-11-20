@@ -5,7 +5,8 @@
  * - Placement and orientation never change a piece's areaCm2.
  * - MOVE_PIECE is committed once on gesture release.
  * - CUT_PIECE: convert the endpoints to the piece's local coordinates
- *   (geometry/transform.ts), cut with geometry/cut.ts. If the cut is invalid,
+ *   (geometry/transform.ts), cut with geometry/cut.ts. The drawn line must
+ *   start and end outside the piece. If the cut is invalid,
  *   return the project unchanged (the UI shows "draw across the piece").
  *   If valid, replace the parent with two fragments in ONE edit:
  *     - ids from action.fragmentIds
@@ -16,6 +17,7 @@
  */
 import { polygonArea } from '@/geometry/area';
 import { cutPolygon } from '@/geometry/cut';
+import { segmentCrossesPolygon } from '@/geometry/hitTest';
 import { designToLocal } from '@/geometry/transform';
 import type { FabricPiece, Project } from '@/model/types';
 
@@ -82,6 +84,8 @@ function cutPiece(project: Project, action: CutPieceAction): Project {
   // The user draws on the canvas; the cut happens in the piece's own coordinates.
   const from = designToLocal(parent, action.from);
   const to = designToLocal(parent, action.to);
+  // The user must draw all the way across the piece, not stop inside it.
+  if (!segmentCrossesPolygon(parent.polygon, from, to)) return project;
   const parts = cutPolygon(parent.polygon, from, to);
   if (!parts) return project;
 

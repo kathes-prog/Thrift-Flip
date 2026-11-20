@@ -190,3 +190,24 @@ describe('P2 · edit edge cases', () => {
     expect(s.present).toBe(start);
   });
 });
+
+describe('P2 · cut must be drawn across the piece', () => {
+  // second-panel spans x 80–100, y 25–45 in skirt layout A.
+  const base: CutPieceAction = {
+    type: 'CUT_PIECE',
+    pieceId: 'second-panel',
+    from: { x: 90, y: 0 },
+    to: { x: 90, y: 70 },
+    fragmentIds: ['frag-a', 'frag-b'],
+  };
+
+  test('a stroke that stops inside the piece is rejected', () => {
+    const p = preset('skirt-a');
+    expect(applyAll(p, { ...base, to: { x: 90, y: 35 } })).toBe(p);
+  });
+
+  test('a stroke above the piece is rejected even though its line would cross it', () => {
+    const p = preset('skirt-a');
+    expect(applyAll(p, { ...base, from: { x: 90, y: 0 }, to: { x: 90, y: 20 } })).toBe(p);
+  });
+});

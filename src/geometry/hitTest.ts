@@ -34,3 +34,27 @@ export function pieceAt(pieces: readonly FabricPiece[], point: Point): FabricPie
   }
   return null;
 }
+
+/** Which side of the line a→b point p is on: > 0, < 0, or 0 when on it. */
+function orient(a: Point, b: Point, p: Point): number {
+  return (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
+}
+
+/** True when segments p1–p2 and q1–q2 cross at a single interior point. */
+function segmentsCross(p1: Point, p2: Point, q1: Point, q2: Point): boolean {
+  const d1 = orient(q1, q2, p1);
+  const d2 = orient(q1, q2, p2);
+  const d3 = orient(p1, p2, q1);
+  const d4 = orient(p1, p2, q2);
+  return d1 * d2 < 0 && d3 * d4 < 0;
+}
+
+/**
+ * True when the segment from → to is drawn all the way across the polygon:
+ * it starts and ends outside the outline and crosses at least one edge.
+ * A stroke that stops inside the piece, or misses it, is not a cut.
+ */
+export function segmentCrossesPolygon(polygon: Polygon, from: Point, to: Point): boolean {
+  if (pointInPolygon(from, polygon) || pointInPolygon(to, polygon)) return false;
+  return polygon.some((a, i) => segmentsCross(from, to, a, polygon[(i + 1) % polygon.length]!));
+}

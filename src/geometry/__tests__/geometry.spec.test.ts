@@ -1,7 +1,7 @@
 /** Owner: P2 · geometry with known inputs. Remove `.skip` as each part is built. */
 import { polygonArea } from '@/geometry/area';
 import { cutPolygon } from '@/geometry/cut';
-import { pieceAt, pointInPolygon } from '@/geometry/hitTest';
+import { pieceAt, pointInPolygon, segmentCrossesPolygon } from '@/geometry/hitTest';
 import {
   designToLocal,
   designToScreen,
@@ -194,5 +194,23 @@ describe('P2 · hit testing', () => {
     // Just inside the bottom of the turned yoke.
     const point = { x: yoke.position.x, y: Math.max(...ys) - 0.5 };
     expect(pieceAt(pieces, point)?.id).toBe('jeans-yoke-l');
+  });
+});
+
+describe('P2 · drawn cut lines', () => {
+  const square = rect(10, 10);
+
+  test('a line drawn all the way across counts', () => {
+    expect(segmentCrossesPolygon(square, { x: 0, y: -8 }, { x: 0, y: 8 })).toBe(true);
+    expect(segmentCrossesPolygon(square, { x: -8, y: -7 }, { x: 8, y: 6 })).toBe(true);
+  });
+
+  test('a line that stops inside the piece does not count', () => {
+    expect(segmentCrossesPolygon(square, { x: 0, y: -8 }, { x: 0, y: 2 })).toBe(false);
+    expect(segmentCrossesPolygon(square, { x: -2, y: 0 }, { x: 2, y: 0 })).toBe(false);
+  });
+
+  test('a line beside the piece does not count, even if its extension would cross it', () => {
+    expect(segmentCrossesPolygon(square, { x: 0, y: -20 }, { x: 0, y: -8 })).toBe(false);
   });
 });

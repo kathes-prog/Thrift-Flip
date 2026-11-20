@@ -12,12 +12,15 @@ import { Screen } from '@/components/Screen';
 import { StubBanner } from '@/components/StubBanner';
 import { getPattern } from '@/fixtures/patterns';
 import { SkirtPreview } from '@/features/preview3d/SkirtPreview';
+import { newFragmentIds } from '@/features/studio/ids';
 import { PIECE_COLORS } from '@/features/studio/palette';
 import { StudioCanvas } from '@/features/studio/StudioCanvas';
 import { ToolButton } from '@/features/studio/ToolButton';
 import { FabricTracker } from '@/features/tracker/FabricTracker';
-import { formatArea } from '@/model/units';
+import { formatArea, type Point } from '@/model/units';
+import type { CutPieceAction } from '@/state/actions';
 import { useProject } from '@/state/ProjectContext';
+import { applyProjectAction } from '@/state/reducer';
 import { colors, radii, spacing } from '@/theme';
 
 /** Each tap of Rotate turns the selected piece this far clockwise. */
@@ -30,6 +33,35 @@ export default function Studio() {
   // A selection only counts while that piece is on the canvas (undo or a cut can remove it).
   const selected = project.pieces.find((p) => p.id === selectedId && p.status === 'canvas');
   const [colorsOpen, setColorsOpen] = useState(false);
+  const [cutMode, setCutMode] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  // Cut mode only means something while a piece is selected.
+  const cutting = cutMode && Boolean(selected);
+
+  const select = (pieceId: string | null) => {
+    setSelectedId(pieceId);
+    setNotice(null);
+  };
+
+  const cut = (from: Point, to: Point) => {
+    if (!selected) return;
+    const action: CutPieceAction = {
+      type: 'CUT_PIECE',
+      pieceId: selected.id,
+      from,
+      to,
+      fragmentIds: newFragmentIds(selected.originalPieceId),
+    };
+    // The reducer is pure, so trying the cut first tells us whether it is valid.
+    if (applyProjectAction(project, action) === project) {
+      setNotice('Draw across the piece, from outside one edge to outside the other.');
+      return;
+    }
+    dispatch(action);
+    setCutMode(false);
+    setSelectedId(null);
+    setNotice(null);
+  };
   const pattern = project.mode?.kind === 'pattern' ? getPattern(project.mode.patternId) : undefined;
   const tray = project.pieces.filter((p) => p.status === 'tray');
 
@@ -64,8 +96,10 @@ export default function Studio() {
             mode={project.mode}
             pieces={project.pieces}
             selectedId={selected?.id ?? null}
-            onSelect={setSelectedId}
+            onSelect={select}
             onMove={(pieceId, position) => dispatch({ type: 'MOVE_PIECE', pieceId, position })}
+            cutMode={cutting}
+            onCut={cut}
           />
         ) : (
           <SkirtPreview project={project} />
@@ -98,7 +132,22 @@ export default function Studio() {
             disabled={!selected}
             onPress={() => selected && dispatch({ type: 'FLIP_PIECE', pieceId: selected.id })}
           />
+          <ToolButton
+            label="Cut"
+            icon="cut"
+            disabled={!selected}
+            active={cutting}
+            onPress={() => {
+              setCutMode(!cutting);
+              setNotice(null);
+            }}
+          />
         </View>
+        {cutting || notice ? (
+          <AppText variant="caption" color={notice ? colors.danger : colors.inkMuted}>
+            {notice ?? 'Drag a line across the selected piece to cut it.'}
+          </AppText>
+        ) : null}
         {selected && colorsOpen ? (
           <View style={styles.swatches}>
             {PIECE_COLORS.map((color) => (

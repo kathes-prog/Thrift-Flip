@@ -9,8 +9,8 @@
  * - Drag a piece to move it. The canvas claims the gesture once the finger
  *   moves, the piece follows the finger locally, and MOVE_PIECE is sent once
  *   on release. A cancelled drag snaps back.
- *
- * TODO(P2): cut mode with a live line.
+ * - In cut mode, dragging draws a straight line instead; on release the line
+ *   is handed to onCut (in design coordinates). Pieces don't move.
  */
 import { useLayoutEffect, useRef, useState } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
@@ -20,7 +20,7 @@ import {
   usePanGesture,
   useTapGesture,
 } from 'react-native-gesture-handler';
-import Svg, { Polygon as SvgPolygon, Rect, Text as SvgText } from 'react-native-svg';
+import Svg, { Line, Polygon as SvgPolygon, Rect, Text as SvgText } from 'react-native-svg';
 
 import { FREESTYLE_CANVAS, getPattern } from '@/fixtures/patterns';
 import { pieceAt } from '@/geometry/hitTest';
@@ -53,6 +53,10 @@ interface StudioCanvasProps {
   onSelect: (pieceId: string | null) => void;
   /** Called once when a drag ends, with the piece's new centre in design coordinates. */
   onMove: (pieceId: string, position: Point) => void;
+  /** When true, dragging draws a cut line instead of moving a piece. */
+  cutMode: boolean;
+  /** Called once when a cut line is released, with both ends in design coordinates. */
+  onCut: (from: Point, to: Point) => void;
 }
 
 /** A piece being dragged: how far it has moved so far, in cm. */
@@ -62,7 +66,21 @@ interface Drag {
   dy: number;
 }
 
-export function StudioCanvas({ mode, pieces, selectedId, onSelect, onMove }: StudioCanvasProps) {
+/** A cut line being drawn, in design coordinates (cm). */
+interface CutLine {
+  from: Point;
+  to: Point;
+}
+
+export function StudioCanvas({
+  mode,
+  pieces,
+  selectedId,
+  onSelect,
+  onMove,
+  cutMode,
+  onCut,
+}: StudioCanvasProps) {
   const pattern = mode?.kind === 'pattern' ? getPattern(mode.patternId) : undefined;
   const canvas = pattern?.canvas ?? FREESTYLE_CANVAS;
 
@@ -75,14 +93,19 @@ export function StudioCanvas({ mode, pieces, selectedId, onSelect, onMove }: Stu
   // The piece under the finger when the touch began; null when it began on empty canvas.
   const dragId = useRef<string | null>(null);
 
+  const [cutLine, setCutLine] = useState<CutLine | null>(null);
+  // Where the cut stroke started, in design coordinates.
+  const cutStart = useRef<Point | null>(null);
+
   // Gesture callbacks read the latest props through this ref, never stale ones.
-  const latest = useRef({ pieces, viewport, onSelect, onMove });
+  const latest = useRef({ pieces, viewport, onSelect, onMove, cutMode, onCut });
   useLayoutEffect(() => {
-    latest.current = { pieces, viewport, onSelect, onMove };
+    latest.current = { pieces, viewport, onSelect, onMove, cutMode, onCut };
   });
 
-  const pieceUnder = (x: number, y: number) =>
-    pieceAt(latest.current.pieces, screenToDesign(latest.current.viewport, { x, y }));
+  const toDesign = (x: number, y: number) => screenToDesign(latest.current.viewport, { x, y });
+
+  const pieceUnder = (x: number, y: number) => pieceAt(latest.current.pieces, toDesign(x, y));
 
   const tap = useTapGesture({
     runOnJS: true,
@@ -96,18 +119,32 @@ export function StudioCanvas({ mode, pieces, selectedId, onSelect, onMove }: Stu
     runOnJS: true,
     minDistance: DRAG_START_DISTANCE,
     onBegin: (e) => {
-      dragId.current = pieceUnder(e.x, e.y)?.id ?? null;
+      if (latest.current.cutMode) {
+        cutStart.current = toDesign(e.x, e.y);
+        dragId.current = null;
+      } else {
+        cutStart.current = null;
+        dragId.current = pieceUnder(e.x, e.y)?.id ?? null;
+      }
     },
     onActivate: () => {
       if (dragId.current) latest.current.onSelect(dragId.current);
     },
     onUpdate: (e) => {
+      if (cutStart.current) {
+        setCutLine({ from: cutStart.current, to: toDesign(e.x, e.y) });
+        return;
+      }
       const pieceId = dragId.current;
       if (!pieceId) return;
       const { scale } = latest.current.viewport;
       setDrag({ pieceId, dx: e.translationX / scale, dy: e.translationY / scale });
     },
     onDeactivate: (e) => {
+      if (cutStart.current) {
+        if (!e.canceled) latest.current.onCut(cutStart.current, toDesign(e.x, e.y));
+        return;
+      }
       const pieceId = dragId.current;
       const piece = latest.current.pieces.find((p) => p.id === pieceId);
       if (!piece || e.canceled) return;
@@ -119,7 +156,9 @@ export function StudioCanvas({ mode, pieces, selectedId, onSelect, onMove }: Stu
     },
     onFinalize: () => {
       dragId.current = null;
+      cutStart.current = null;
       setDrag(null);
+      setCutLine(null);
     },
   });
 
@@ -184,6 +223,18 @@ export function StudioCanvas({ mode, pieces, selectedId, onSelect, onMove }: Stu
                 strokeWidth={0.8}
                 strokeDasharray="2 1"
                 strokeLinejoin="round"
+              />
+            ) : null}
+            {cutLine ? (
+              <Line
+                x1={cutLine.from.x}
+                y1={cutLine.from.y}
+                x2={cutLine.to.x}
+                y2={cutLine.to.y}
+                stroke={colors.danger}
+                strokeWidth={0.6}
+                strokeDasharray="2 1.2"
+                strokeLinecap="round"
               />
             ) : null}
           </Svg>
