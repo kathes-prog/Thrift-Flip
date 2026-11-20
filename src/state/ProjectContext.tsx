@@ -14,6 +14,8 @@ interface ProjectContextValue {
   dispatch: (action: AppAction) => void;
   canUndo: boolean;
   undo: () => void;
+  canRedo: boolean;
+  redo: () => void;
 }
 
 const ProjectContext = createContext<ProjectContextValue | null>(null);
@@ -33,6 +35,8 @@ export function ProjectProvider({
       dispatch,
       canUndo: state.past.length > 0,
       undo: () => dispatch({ type: 'UNDO' }),
+      canRedo: state.future.length > 0,
+      redo: () => dispatch({ type: 'REDO' }),
     }),
     [state],
   );
