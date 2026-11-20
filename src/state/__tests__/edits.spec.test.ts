@@ -1,5 +1,5 @@
 /** Owner: P2 · requirements 4 and 5. Remove `.skip` when built. */
-import type { CutPieceAction } from '@/state/actions';
+import type { CutPieceAction, StitchPiecesAction } from '@/state/actions';
 import { initHistory, rootReducer } from '@/state/reducer';
 import { applyAll, preset } from '@/testUtils';
 
@@ -209,5 +209,93 @@ describe('P2 · cut must be drawn across the piece', () => {
   test('a stroke above the piece is rejected even though its line would cross it', () => {
     const p = preset('skirt-a');
     expect(applyAll(p, { ...base, from: { x: 90, y: 0 }, to: { x: 90, y: 20 } })).toBe(p);
+  });
+});
+
+describe('P2 · resize', () => {
+  test('scales the outline about its centre and the area by factor²', () => {
+    const p = preset('skirt-a');
+    const before = piece(p, 'second-panel')!;
+    const next = applyAll(p, { type: 'RESIZE_PIECE', pieceId: 'second-panel', factor: 1.5 });
+    const after = piece(next, 'second-panel')!;
+    expect(after.areaCm2).toBeCloseTo(before.areaCm2 * 2.25);
+    expect(after.position).toEqual(before.position);
+    expect(after.polygon[0]!.x).toBeCloseTo(before.polygon[0]!.x * 1.5);
+  });
+
+  test('a factor of 1, zero or less changes nothing', () => {
+    const p = preset('skirt-a');
+    for (const factor of [1, 0, -2, Number.NaN]) {
+      expect(applyAll(p, { type: 'RESIZE_PIECE', pieceId: 'second-panel', factor })).toBe(p);
+    }
+  });
+
+  test('cannot shrink a piece below 1 cm²', () => {
+    const p = preset('skirt-a');
+    expect(applyAll(p, { type: 'RESIZE_PIECE', pieceId: 'second-panel', factor: 0.01 })).toBe(p);
+  });
+});
+
+describe('P2 · stitch', () => {
+  const stitch = (a: string, b: string, groupId = 'g1'): StitchPiecesAction => ({
+    type: 'STITCH_PIECES',
+    pieceIds: [a, b],
+    groupId,
+  });
+
+  test('stitched pieces move together', () => {
+    const p = preset('skirt-a');
+    const yoke = piece(p, 'jeans-yoke-l')!;
+    const pocket = piece(p, 'jeans-pocket-l')!;
+    const next = applyAll(p, stitch('jeans-yoke-l', 'jeans-pocket-l'), {
+      type: 'MOVE_PIECE',
+      pieceId: 'jeans-pocket-l',
+      position: { x: pocket.position.x + 10, y: pocket.position.y - 5 },
+    });
+    expect(piece(next, 'jeans-yoke-l')?.position).toEqual({
+      x: yoke.position.x + 10,
+      y: yoke.position.y - 5,
+    });
+    expect(piece(next, 'second-panel')?.position).toEqual(piece(p, 'second-panel')?.position);
+  });
+
+  test('stitching into an existing group merges the groups', () => {
+    const next = applyAll(
+      preset('skirt-a'),
+      stitch('jeans-yoke-l', 'jeans-pocket-l', 'g1'),
+      stitch('second-panel', 'jeans-pocket-l', 'g2'),
+    );
+    for (const id of ['jeans-yoke-l', 'jeans-pocket-l', 'second-panel']) {
+      expect(piece(next, id)?.groupId).toBe('g2');
+    }
+  });
+
+  test('a piece cannot be stitched to itself, to a tray piece, or twice', () => {
+    const p = preset('skirt-a');
+    expect(applyAll(p, stitch('second-panel', 'second-panel'))).toBe(p);
+    expect(applyAll(p, stitch('second-panel', 'jeans-waistband'))).toBe(p);
+    const once = applyAll(p, stitch('second-panel', 'jeans-yoke-l'));
+    expect(applyAll(once, stitch('second-panel', 'jeans-yoke-l', 'g9'))).toBe(once);
+  });
+
+  test('unstitching the second-last piece frees both', () => {
+    const next = applyAll(preset('skirt-a'), stitch('jeans-yoke-l', 'jeans-pocket-l'), {
+      type: 'UNSTITCH_PIECE',
+      pieceId: 'jeans-pocket-l',
+    });
+    expect(piece(next, 'jeans-yoke-l')?.groupId).toBeUndefined();
+    expect(piece(next, 'jeans-pocket-l')?.groupId).toBeUndefined();
+  });
+
+  test('unstitching one of three leaves the other two stitched', () => {
+    const next = applyAll(
+      preset('skirt-a'),
+      stitch('jeans-yoke-l', 'jeans-pocket-l'),
+      stitch('second-panel', 'jeans-pocket-l', 'g2'),
+      { type: 'UNSTITCH_PIECE', pieceId: 'second-panel' },
+    );
+    expect(piece(next, 'second-panel')?.groupId).toBeUndefined();
+    expect(piece(next, 'jeans-yoke-l')?.groupId).toBe('g2');
+    expect(piece(next, 'jeans-pocket-l')?.groupId).toBe('g2');
   });
 });

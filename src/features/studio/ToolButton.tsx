@@ -1,22 +1,25 @@
 /**
- * Owner: P2. A compact Studio toolbar button: icon above a small label.
+ * Owner: P2. A Studio toolbar button: icon above a small label, no box,
+ * as in the hi-fi Figma. Active tools get a soft highlight.
  */
 import { Pressable, StyleSheet } from 'react-native';
 
 import { AppText } from '@/components/AppText';
-import { colors, Icon, radii, spacing, type IconName } from '@/theme';
+import { Icon, radii, type IconName } from '@/theme';
+
+import { studio } from './studioStyle';
 
 interface ToolButtonProps {
   label: string;
   icon: IconName;
   onPress: () => void;
   disabled?: boolean;
-  /** Highlighted, e.g. while the colour swatches are open. */
+  /** Highlighted while its option row or mode is open. */
   active?: boolean;
 }
 
 export function ToolButton({ label, icon, onPress, disabled, active }: ToolButtonProps) {
-  const color = active ? colors.inkInverse : colors.ink;
+  const color = disabled ? studio.faint : active ? studio.sage : studio.ink;
   return (
     <Pressable
       accessibilityRole="button"
@@ -27,12 +30,11 @@ export function ToolButton({ label, icon, onPress, disabled, active }: ToolButto
       style={({ pressed }) => [
         styles.base,
         active && styles.active,
-        pressed && !active && styles.pressed,
-        disabled && styles.disabled,
+        pressed && !disabled && styles.pressed,
       ]}
     >
-      <Icon name={icon} size={22} color={color} />
-      <AppText variant="caption" color={color}>
+      <Icon name={icon} size={24} color={color} />
+      <AppText variant="caption" color={color} style={styles.label}>
         {label}
       </AppText>
     </Pressable>
@@ -41,13 +43,13 @@ export function ToolButton({ label, icon, onPress, disabled, active }: ToolButto
 
 const styles = StyleSheet.create({
   base: {
-    flex: 1,
+    width: 62,
     alignItems: 'center',
-    gap: 2,
-    paddingVertical: spacing.xs + 2,
-    borderRadius: radii.sm,
+    gap: 4,
+    paddingVertical: 6,
+    borderRadius: radii.md,
   },
-  active: { backgroundColor: colors.primary },
-  pressed: { backgroundColor: colors.border },
-  disabled: { opacity: 0.35 },
+  active: { backgroundColor: '#E6ECE6' },
+  pressed: { backgroundColor: '#ECEAE4' },
+  label: { fontSize: 12, lineHeight: 15 },
 });

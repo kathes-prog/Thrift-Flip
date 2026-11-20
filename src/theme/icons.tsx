@@ -20,6 +20,11 @@ export const iconNames = [
   'flip',
   'color',
   'undo',
+  'redo',
+  'resize',
+  'stitch',
+  'layers',
+  'back',
   'store',
   'restore',
   'discard',
@@ -92,6 +97,22 @@ function glyph(name: IconName, s: StrokeProps) {
       );
     case 'undo':
       return <Path d="M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3" {...s} />;
+    case 'redo':
+      return <Path d="M15 14l5-5-5-5M20 9H10a6 6 0 0 0 0 12h3" {...s} />;
+    case 'resize':
+      return <Path d="M4 20L20 4M13 4h7v7M4 13v7h7" {...s} />;
+    case 'stitch':
+      return (
+        <>
+          <Rect x={3} y={7} width={7} height={10} rx={1} {...s} />
+          <Rect x={14} y={7} width={7} height={10} rx={1} {...s} />
+          <Path d="M10 10h4M10 14h4" {...s} />
+        </>
+      );
+    case 'layers':
+      return <Path d="M12 3l9 5-9 5-9-5zM3 12l9 5 9-5M3 16l9 5 9-5" {...s} />;
+    case 'back':
+      return <Path d="M15 4l-8 8 8 8" {...s} />;
     case 'store':
       return <Path d="M3 8h18v12H3zM3 8l2-4h14l2 4M9 12h6" {...s} />;
     case 'restore':
