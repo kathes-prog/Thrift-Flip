@@ -25,9 +25,10 @@ export default function Studio() {
   const tray = project.pieces.filter((p) => p.status === 'tray');
 
   return (
-    // The canvas must own its pan gestures, so this screen doesn't scroll as a whole.
+    // The canvas must own its pan gestures, so it stays fixed at the top and
+    // only the panel underneath it scrolls.
     <Screen scroll={false}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <View style={styles.fixed}>
         <StubBanner
           owner="P2"
           note="Pieces on canvas, tray placement, move / rotate / flip / cut tools."
@@ -50,7 +51,13 @@ export default function Studio() {
           />
           <Button label="Undo" icon="undo" variant="secondary" disabled={!canUndo} onPress={undo} />
         </View>
-        {view === '2d' ? <StudioCanvas mode={project.mode} /> : <SkirtPreview project={project} />}
+        {view === '2d' ? (
+          <StudioCanvas mode={project.mode} pieces={project.pieces} />
+        ) : (
+          <SkirtPreview project={project} />
+        )}
+      </View>
+      <ScrollView style={styles.panel} contentContainerStyle={styles.panelContent}>
         <AppText variant="heading">Tray</AppText>
         {tray.length === 0 ? <AppText color={colors.inkMuted}>Tray is empty.</AppText> : null}
         {tray.map((piece) => (
@@ -68,7 +75,9 @@ export default function Studio() {
 }
 
 const styles = StyleSheet.create({
-  content: { padding: spacing.md, gap: spacing.md },
+  fixed: { padding: spacing.md, paddingBottom: spacing.sm, gap: spacing.sm },
+  panel: { flex: 1 },
+  panelContent: { paddingHorizontal: spacing.md, paddingBottom: spacing.md, gap: spacing.md },
   toolbar: { flexDirection: 'row', gap: spacing.sm },
   trayRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   dot: { width: 12, height: 12, borderRadius: 6 },

@@ -4,7 +4,9 @@
  * Draws the pattern guide (or a blank Freestyle canvas) and, once built, the
  * fabric polygons in the SAME SVG viewBox, which is the design canvas in cm.
  *
- * TODO(P2): draw placed pieces with geometry/transform.ts, selection outline,
+ * Placed pieces are drawn with geometry/transform.ts.
+ *
+ * TODO(P2): selection outline,
  * tap to select, pan to move (canvas claims the gesture once movement starts,
  * commit MOVE_PIECE on release, restore on cancel), cut mode with a live line.
  */
@@ -12,7 +14,8 @@ import { StyleSheet, View } from 'react-native';
 import Svg, { Polygon as SvgPolygon, Rect, Text as SvgText } from 'react-native-svg';
 
 import { FREESTYLE_CANVAS, getPattern } from '@/fixtures/patterns';
-import type { DesignMode } from '@/model/types';
+import { pieceToDesign } from '@/geometry/transform';
+import type { DesignMode, FabricPiece } from '@/model/types';
 import type { Polygon } from '@/model/units';
 import { colors, radii } from '@/theme';
 
@@ -28,7 +31,13 @@ function centroid(polygon: Polygon) {
   };
 }
 
-export function StudioCanvas({ mode }: { mode: DesignMode | null }) {
+interface StudioCanvasProps {
+  mode: DesignMode | null;
+  /** Every piece in the project; only those with status 'canvas' are drawn, in list order. */
+  pieces: readonly FabricPiece[];
+}
+
+export function StudioCanvas({ mode, pieces }: StudioCanvasProps) {
   const pattern = mode?.kind === 'pattern' ? getPattern(mode.patternId) : undefined;
   const canvas = pattern?.canvas ?? FREESTYLE_CANVAS;
 
@@ -61,6 +70,19 @@ export function StudioCanvas({ mode }: { mode: DesignMode | null }) {
             </SvgText>
           );
         })}
+        {pieces
+          .filter((piece) => piece.status === 'canvas')
+          .map((piece) => (
+            <SvgPolygon
+              key={piece.id}
+              points={points(pieceToDesign(piece))}
+              fill={piece.color}
+              stroke={colors.ink}
+              strokeOpacity={0.35}
+              strokeWidth={0.3}
+              strokeLinejoin="round"
+            />
+          ))}
       </Svg>
     </View>
   );
