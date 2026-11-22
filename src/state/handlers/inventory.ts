@@ -18,9 +18,16 @@ import type { InventoryAction } from '../actions';
 
 export function handleInventoryAction(project: Project, action: InventoryAction): Project {
   switch (action.type) {
-    case 'PLACE_PIECE':
-      // TODO(P1)
-      return project;
+    case 'PLACE_PIECE': {
+      // TEMP(P2): bare tray -> canvas so the Studio works with test pieces.
+      // TODO(P1): replace with the full eligibility rules above.
+      const index = project.pieces.findIndex((p) => p.id === action.pieceId);
+      const piece = project.pieces[index];
+      if (!piece || piece.status !== 'tray') return project;
+      const pieces = [...project.pieces];
+      pieces[index] = { ...piece, status: 'canvas', position: action.position };
+      return { ...project, pieces };
+    }
     case 'STORE_PIECE':
       // TODO(P1)
       return project;

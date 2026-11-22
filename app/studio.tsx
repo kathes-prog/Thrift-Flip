@@ -5,23 +5,27 @@
  *
  * - Tapping a tray card sends PLACE_PIECE; P1's inventory handler decides
  *   whether it may go on the canvas (e.g. a third jeans pocket is rejected).
- * - Store / Discard send P1's STORE_PIECE / DISCARD_PIECE for the selection.
+ * - Discard sends the selection back to the tray (RETURN_PIECE); Store sends
+ *   P1's STORE_PIECE.
+ * - Rotate, Cut and Stitch are finger gestures on the canvas (StudioCanvas).
  * - The 3D view is P3's <SkirtPreview />. The sheet's totals come from P1's
- *   selectTracker().
+ *   selectTracker() (with a temporary fallback while it returns zeros).
  */
 import { router, Stack } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/AppText';
 import { FREESTYLE_CANVAS, getPattern } from '@/fixtures/patterns';
+import { pieceAt } from '@/geometry/hitTest';
 import { SkirtPreview } from '@/features/preview3d/SkirtPreview';
-import { newFragmentIds, newGroupId } from '@/features/studio/ids';
+import { newFragmentIds, newMergedId } from '@/features/studio/ids';
 import { PIECE_COLORS } from '@/features/studio/palette';
-import { PieceCard, sizeLabel } from '@/features/studio/PieceCard';
-import { StudioCanvas } from '@/features/studio/StudioCanvas';
+import { PieceCard } from '@/features/studio/PieceCard';
+import { StudioCanvas, type CanvasTool } from '@/features/studio/StudioCanvas';
 import { studio } from '@/features/studio/studioStyle';
+import { fallbackTotals, testPieceProject } from '@/features/studio/testPieces';
 import { ToolButton } from '@/features/studio/ToolButton';
 import type { FabricPiece } from '@/model/types';
 import { formatArea, type Point } from '@/model/units';
@@ -31,13 +35,13 @@ import { applyProjectAction } from '@/state/reducer';
 import { selectTracker } from '@/state/selectors';
 import { Icon, radii, spacing, type IconName } from '@/theme';
 
-/** Each tap of Rotate turns the selected piece this far clockwise. */
+/** The quick-turn buttons in the Rotate row turn the piece this far. */
 const ROTATE_STEP_DEG = 90;
-/** Each tap of Resize − / + scales the selected piece by this factor. */
-const RESIZE_STEP = 1.1;
+/** Points sampled along a stitch line to find the pieces it joins. */
+const STITCH_SAMPLES = 40;
 
 /** The tool whose option row or mode is open. Only one at a time. */
-type Tool = 'color' | 'resize' | 'cut' | 'stitch';
+type Tool = 'rotate' | 'color' | 'flip' | 'cut' | 'stitch';
 
 export default function Studio() {
   const insets = useSafeAreaInsets();
@@ -52,12 +56,25 @@ export default function Studio() {
   const canvas = pattern?.canvas ?? FREESTYLE_CANVAS;
   const tray = project.pieces.filter((p) => p.status === 'tray');
   const onCanvas = project.pieces.filter((p) => p.status === 'canvas');
-  const tracker = selectTracker(project);
+  const p1Tracker = selectTracker(project);
+  // TEMP: P1's selectTracker() returns zeros until it's built.
+  const tracker = p1Tracker.recoveredCm2 > 0 ? p1Tracker : fallbackTotals(project);
+
+  // TEMP: give an empty project the sample pieces so every tool can be tried.
+  const isEmpty = project.pieces.length === 0;
+  useEffect(() => {
+    if (!isEmpty) return;
+    const sample = testPieceProject(project);
+    if (sample) dispatch({ type: 'LOAD_PROJECT', project: sample });
+  }, [isEmpty, project, dispatch]);
 
   // A selection only counts while that piece is on the canvas (undo or a cut can remove it).
   const selected = onCanvas.find((p) => p.id === selectedId);
-  // Tools only stay open while there is something selected to use them on.
-  const tool = selected ? openTool : null;
+  // Stitch needs two pieces on the canvas; every other tool needs a selection.
+  const tool =
+    openTool === 'stitch' ? (onCanvas.length >= 2 ? 'stitch' : null) : selected ? openTool : null;
+  const canvasTool: CanvasTool =
+    tool === 'rotate' || tool === 'cut' || tool === 'stitch' ? tool : 'move';
 
   const title = pattern ? `${pattern.name} design` : 'Untitled design';
   const subtitle =
@@ -89,25 +106,13 @@ export default function Studio() {
 
   // ---- canvas callbacks
 
-  const onTap = (pieceId: string | null) => {
-    if (tool === 'stitch' && selected) {
-      if (pieceId && pieceId !== selected.id) {
-        attempt(
-          { type: 'STITCH_PIECES', pieceIds: [selected.id, pieceId], groupId: newGroupId() },
-          'Those pieces are already stitched together.',
-        );
-      }
-      setOpenTool(null);
-      return;
-    }
-    select(pieceId);
-  };
+  const onTap = (pieceId: string | null) => select(pieceId);
 
   const onDragStart = (pieceId: string) => {
     if (pieceId !== selectedId) select(pieceId);
   };
 
-  const onCut = (from: Point, to: Point) => {
+  const cut = (from: Point, to: Point) => {
     if (!selected) return;
     const done = attempt(
       {
@@ -124,6 +129,41 @@ export default function Studio() {
       setSelectedId(null);
     }
   };
+
+  /** The first two different pieces the line passes over, in the order it meets them. */
+  const piecesAlong = (from: Point, to: Point) => {
+    const found: string[] = [];
+    for (let i = 0; i <= STITCH_SAMPLES; i++) {
+      const t = i / STITCH_SAMPLES;
+      const hit = pieceAt(onCanvas, {
+        x: from.x + (to.x - from.x) * t,
+        y: from.y + (to.y - from.y) * t,
+      });
+      if (hit && !found.includes(hit.id)) found.push(hit.id);
+      if (found.length === 2) break;
+    }
+    return found;
+  };
+
+  const stitch = (from: Point, to: Point) => {
+    const [a, b] = piecesAlong(from, to);
+    if (!a || !b) {
+      setNotice('Draw the line from one piece onto another.');
+      return;
+    }
+    const mergedId = newMergedId();
+    const done = attempt(
+      { type: 'STITCH_PIECES', pieceIds: [a, b], mergedId },
+      'Overlap the two pieces where the seam goes, then draw across it.',
+    );
+    if (done) {
+      setOpenTool(null);
+      setSelectedId(mergedId);
+    }
+  };
+
+  const onStroke = (from: Point, to: Point) =>
+    tool === 'stitch' ? stitch(from, to) : cut(from, to);
 
   const place = (piece: FabricPiece) => {
     const done = attempt(
@@ -155,13 +195,8 @@ export default function Studio() {
       label: 'Rotate',
       icon: 'rotate',
       disabled: !selected,
-      onPress: () =>
-        selected &&
-        dispatch({
-          type: 'ROTATE_PIECE',
-          pieceId: selected.id,
-          rotationDeg: selected.rotationDeg + ROTATE_STEP_DEG,
-        }),
+      active: tool === 'rotate',
+      onPress: () => toggleTool('rotate'),
     },
     {
       label: 'Color',
@@ -174,14 +209,8 @@ export default function Studio() {
       label: 'Flip',
       icon: 'flip',
       disabled: !selected,
-      onPress: () => selected && dispatch({ type: 'FLIP_PIECE', pieceId: selected.id }),
-    },
-    {
-      label: 'Resize',
-      icon: 'resize',
-      disabled: !selected,
-      active: tool === 'resize',
-      onPress: () => toggleTool('resize'),
+      active: tool === 'flip',
+      onPress: () => toggleTool('flip'),
     },
     {
       label: 'Cut',
@@ -191,18 +220,11 @@ export default function Studio() {
       onPress: () => toggleTool('cut'),
     },
     {
-      label: selected?.groupId ? 'Unstitch' : 'Stitch',
+      label: 'Stitch',
       icon: 'stitch',
-      disabled: !selected,
+      disabled: onCanvas.length < 2,
       active: tool === 'stitch',
-      onPress: () => {
-        if (selected?.groupId) {
-          dispatch({ type: 'UNSTITCH_PIECE', pieceId: selected.id });
-          setOpenTool(null);
-        } else {
-          toggleTool('stitch');
-        }
-      },
+      onPress: () => toggleTool('stitch'),
     },
   ];
 
@@ -210,7 +232,7 @@ export default function Studio() {
     tool === 'cut'
       ? 'Drag a line across the selected piece to cut it.'
       : tool === 'stitch'
-        ? `Tap another piece to stitch it to ${selected?.displayName ?? 'this one'}.`
+        ? 'Overlap two pieces, then draw a line from one onto the other.'
         : null;
 
   return (
@@ -282,8 +304,11 @@ export default function Studio() {
             onTap={onTap}
             onDragStart={onDragStart}
             onMove={(pieceId, position) => dispatch({ type: 'MOVE_PIECE', pieceId, position })}
-            cutMode={tool === 'cut'}
-            onCut={onCut}
+            tool={canvasTool}
+            onRotate={(pieceId, rotationDeg) =>
+              dispatch({ type: 'ROTATE_PIECE', pieceId, rotationDeg })
+            }
+            onStroke={onStroke}
           >
             <View style={styles.canvasActions} pointerEvents="box-none">
               <FloatingAction
@@ -306,8 +331,8 @@ export default function Studio() {
                 onPress={() =>
                   selected &&
                   attempt(
-                    { type: 'DISCARD_PIECE', pieceId: selected.id },
-                    `${selected.displayName} can't be discarded right now.`,
+                    { type: 'RETURN_PIECE', pieceId: selected.id },
+                    `${selected.displayName} can't be removed right now.`,
                   )
                 }
               />
@@ -321,20 +346,63 @@ export default function Studio() {
       </View>
 
       {/* Tool row */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.tools}
-        style={styles.toolsScroll}
-      >
+      <View style={styles.tools}>
         {tools.map((t) => (
           <ToolButton key={t.icon} {...t} />
         ))}
-      </ScrollView>
+      </View>
 
       {/* Option area: a fixed height, so opening a tool never resizes the canvas */}
       <View style={styles.optionArea}>
-        {selected && tool === 'color' ? (
+        {selected && tool === 'rotate' ? (
+          <View style={styles.optionRow}>
+            <StepButton
+              label="↺"
+              accessibilityLabel="Turn 90 degrees left"
+              onPress={() =>
+                dispatch({
+                  type: 'ROTATE_PIECE',
+                  pieceId: selected.id,
+                  rotationDeg: selected.rotationDeg - ROTATE_STEP_DEG,
+                })
+              }
+            />
+            <View style={styles.resizeInfo}>
+              <AppText variant="label" color={studio.ink}>
+                {`${Math.round(selected.rotationDeg)}°`}
+              </AppText>
+              <AppText variant="caption" color={studio.muted}>
+                Drag on the canvas to turn it
+              </AppText>
+            </View>
+            <StepButton
+              label="↻"
+              accessibilityLabel="Turn 90 degrees right"
+              onPress={() =>
+                dispatch({
+                  type: 'ROTATE_PIECE',
+                  pieceId: selected.id,
+                  rotationDeg: selected.rotationDeg + ROTATE_STEP_DEG,
+                })
+              }
+            />
+          </View>
+        ) : selected && tool === 'flip' ? (
+          <View style={[styles.optionRow, styles.flipRow]}>
+            <OptionButton
+              label="↔  Left to right"
+              onPress={() =>
+                dispatch({ type: 'FLIP_PIECE', pieceId: selected.id, axis: 'horizontal' })
+              }
+            />
+            <OptionButton
+              label="↕  Top to bottom"
+              onPress={() =>
+                dispatch({ type: 'FLIP_PIECE', pieceId: selected.id, axis: 'vertical' })
+              }
+            />
+          </View>
+        ) : selected && tool === 'color' ? (
           <View style={styles.optionRow}>
             {PIECE_COLORS.map((color) => (
               <Pressable
@@ -350,34 +418,6 @@ export default function Studio() {
                 ]}
               />
             ))}
-          </View>
-        ) : selected && tool === 'resize' ? (
-          <View style={styles.optionRow}>
-            <StepButton
-              label="−"
-              accessibilityLabel="Make smaller"
-              onPress={() =>
-                attempt(
-                  { type: 'RESIZE_PIECE', pieceId: selected.id, factor: 1 / RESIZE_STEP },
-                  'This piece is as small as it can go.',
-                )
-              }
-            />
-            <View style={styles.resizeInfo}>
-              <AppText variant="label" color={studio.ink}>
-                {sizeLabel(selected.polygon)}
-              </AppText>
-              <AppText variant="caption" color={notice ? studio.discard : studio.muted}>
-                {notice ?? formatArea(selected.areaCm2)}
-              </AppText>
-            </View>
-            <StepButton
-              label="+"
-              accessibilityLabel="Make bigger"
-              onPress={() =>
-                dispatch({ type: 'RESIZE_PIECE', pieceId: selected.id, factor: RESIZE_STEP })
-              }
-            />
           </View>
         ) : notice || hint ? (
           <AppText
@@ -470,6 +510,20 @@ function FloatingAction({
   );
 }
 
+function OptionButton({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [styles.option, pressed && styles.floatingPressed]}
+    >
+      <AppText variant="label" color={studio.ink}>
+        {label}
+      </AppText>
+    </Pressable>
+  );
+}
+
 function StepButton({
   label,
   accessibilityLabel,
@@ -543,8 +597,7 @@ const styles = StyleSheet.create({
   },
   floatingDisabled: { opacity: 0.45 },
   floatingPressed: { backgroundColor: '#EFEDE7' },
-  toolsScroll: { flexGrow: 0 },
-  tools: { paddingHorizontal: spacing.sm, paddingVertical: spacing.sm, gap: 2 },
+  tools: { flexDirection: 'row', paddingHorizontal: spacing.xs, paddingVertical: spacing.sm },
   optionArea: { height: 56, justifyContent: 'center', paddingHorizontal: spacing.lg },
   optionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   swatch: {
@@ -556,6 +609,16 @@ const styles = StyleSheet.create({
   },
   swatchChosen: { borderWidth: 3, borderColor: studio.selection },
   resizeInfo: { alignItems: 'center' },
+  flipRow: { justifyContent: 'center', gap: spacing.sm },
+  option: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: spacing.sm + 2,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: studio.canvasBorder,
+    backgroundColor: studio.card,
+  },
   step: {
     width: 44,
     height: 44,

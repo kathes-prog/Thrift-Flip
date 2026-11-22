@@ -21,7 +21,6 @@ export const iconNames = [
   'color',
   'undo',
   'redo',
-  'resize',
   'stitch',
   'layers',
   'back',
@@ -99,8 +98,6 @@ function glyph(name: IconName, s: StrokeProps) {
       return <Path d="M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3" {...s} />;
     case 'redo':
       return <Path d="M15 14l5-5-5-5M20 9H10a6 6 0 0 0 0 12h3" {...s} />;
-    case 'resize':
-      return <Path d="M4 20L20 4M13 4h7v7M4 13v7h7" {...s} />;
     case 'stitch':
       return (
         <>

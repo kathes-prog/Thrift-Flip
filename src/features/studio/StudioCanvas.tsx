@@ -8,11 +8,14 @@
  *
  * Touch:
  * - Tap reports the piece under the finger (or null) through onTap.
- * - Drag a piece to move it. The canvas claims the gesture once the finger
- *   moves; the piece (and anything stitched to it) follows the finger
- *   locally, and onMove is called once on release. A cancelled drag snaps back.
- * - In cut mode, dragging draws a straight line instead; on release the line
- *   is handed to onCut (in design coordinates). Pieces don't move.
+ * What a drag does depends on `tool`:
+ * - 'move': drag a piece to move it. It follows the finger locally and
+ *   onMove is called once on release. A cancelled drag snaps back.
+ * - 'rotate': drag anywhere to spin the selected piece about its centre. Its
+ *   position is locked; the angle snaps to whole degrees (and to 45° steps
+ *   when close) and onRotate is called once on release.
+ * - 'cut' / 'stitch': dragging draws a straight line; on release it is handed
+ *   to onStroke in design coordinates. Pieces don't move.
  *
  * Anything passed as children (Store / Discard buttons) floats over the canvas.
  */
@@ -24,7 +27,7 @@ import {
   usePanGesture,
   useTapGesture,
 } from 'react-native-gesture-handler';
-import Svg, { Line, Polygon as SvgPolygon, Rect, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, Line, Polygon as SvgPolygon, Rect, Text as SvgText } from 'react-native-svg';
 
 import { AppText } from '@/components/AppText';
 import { FREESTYLE_CANVAS, getPattern } from '@/fixtures/patterns';
@@ -43,6 +46,20 @@ const DRAG_START_DISTANCE = 4;
 const GRID_CM = 5;
 /** Empty space kept around the design area when fitting it, as a share of the frame. */
 const FIT_MARGIN = 0.04;
+/** While rotating, angles this close to a multiple of 45° snap onto it. */
+const SNAP_DEG = 4;
+
+export type CanvasTool = 'move' | 'rotate' | 'cut' | 'stitch';
+
+function snapAngle(deg: number) {
+  const nearest45 = Math.round(deg / 45) * 45;
+  const snapped = Math.abs(deg - nearest45) <= SNAP_DEG ? nearest45 : Math.round(deg);
+  return ((snapped % 360) + 360) % 360;
+}
+
+function angleDeg(from: Point, to: Point) {
+  return (Math.atan2(to.y - from.y, to.x - from.x) * 180) / Math.PI;
+}
 
 function points(polygon: Polygon) {
   return polygon.map((p) => `${p.x},${p.y}`).join(' ');
@@ -74,22 +91,29 @@ interface StudioCanvasProps {
   onDragStart: (pieceId: string) => void;
   /** Called once when a drag ends, with the piece's new centre in design coordinates. */
   onMove: (pieceId: string, position: Point) => void;
-  /** When true, dragging draws a cut line instead of moving a piece. */
-  cutMode: boolean;
-  /** Called once when a cut line is released, with both ends in design coordinates. */
-  onCut: (from: Point, to: Point) => void;
+  /** What dragging does (see above). */
+  tool: CanvasTool;
+  /** Rotate tool: called once on release with the selected piece's new angle. */
+  onRotate: (pieceId: string, rotationDeg: number) => void;
+  /** Cut / stitch tools: called once when the line is released, ends in design coordinates. */
+  onStroke: (from: Point, to: Point) => void;
   children?: ReactNode;
 }
 
-/** A drag in progress: how far the piece (and its group) has moved so far, in cm. */
+/** A drag in progress: how far the piece has moved so far, in cm. */
 interface Drag {
   pieceId: string;
-  groupId?: string;
   dx: number;
   dy: number;
 }
 
-interface CutLine {
+/** A rotation in progress: the angle the selected piece is shown at. */
+interface Spin {
+  pieceId: string;
+  rotationDeg: number;
+}
+
+interface Stroke {
   from: Point;
   to: Point;
 }
@@ -107,8 +131,9 @@ export function StudioCanvas({
   onTap,
   onDragStart,
   onMove,
-  cutMode,
-  onCut,
+  tool,
+  onRotate,
+  onStroke,
   children,
 }: StudioCanvasProps) {
   const pattern = mode?.kind === 'pattern' ? getPattern(mode.patternId) : undefined;
@@ -135,14 +160,43 @@ export function StudioCanvas({
   const [drag, setDrag] = useState<Drag | null>(null);
   // The piece under the finger when the touch began; null when it began on empty canvas.
   const dragId = useRef<string | null>(null);
-  const [cutLine, setCutLine] = useState<CutLine | null>(null);
-  // Where the cut stroke started, in design coordinates.
-  const cutStart = useRef<Point | null>(null);
+  const [spin, setSpin] = useState<Spin | null>(null);
+  // Rotation: the piece's starting angle, and how far the finger has swept around its centre.
+  const spinStart = useRef<{
+    pieceId: string;
+    centre: Point;
+    base: number;
+    last: number;
+    swept: number;
+  } | null>(null);
+  const [stroke, setStroke] = useState<Stroke | null>(null);
+  // Where the cut / stitch line started, in design coordinates.
+  const strokeStart = useRef<Point | null>(null);
 
   // Gesture callbacks read the latest props through this ref, never stale ones.
-  const latest = useRef({ pieces, viewport, onTap, onDragStart, onMove, cutMode, onCut });
+  const latest = useRef({
+    pieces,
+    viewport,
+    selectedId,
+    tool,
+    onTap,
+    onDragStart,
+    onMove,
+    onRotate,
+    onStroke,
+  });
   useLayoutEffect(() => {
-    latest.current = { pieces, viewport, onTap, onDragStart, onMove, cutMode, onCut };
+    latest.current = {
+      pieces,
+      viewport,
+      selectedId,
+      tool,
+      onTap,
+      onDragStart,
+      onMove,
+      onRotate,
+      onStroke,
+    };
   });
 
   const toDesign = (x: number, y: number) => screenToDesign(latest.current.viewport, { x, y });
@@ -160,11 +214,24 @@ export function StudioCanvas({
     runOnJS: true,
     minDistance: DRAG_START_DISTANCE,
     onBegin: (e) => {
-      if (latest.current.cutMode) {
-        cutStart.current = toDesign(e.x, e.y);
-        dragId.current = null;
+      dragId.current = null;
+      strokeStart.current = null;
+      spinStart.current = null;
+      const { tool: current, pieces: all, selectedId: sel } = latest.current;
+      if (current === 'cut' || current === 'stitch') {
+        strokeStart.current = toDesign(e.x, e.y);
+      } else if (current === 'rotate') {
+        const piece = all.find((p) => p.id === sel && p.status === 'canvas');
+        if (!piece) return;
+        const start = angleDeg(piece.position, toDesign(e.x, e.y));
+        spinStart.current = {
+          pieceId: piece.id,
+          centre: piece.position,
+          base: piece.rotationDeg,
+          last: start,
+          swept: 0,
+        };
       } else {
-        cutStart.current = null;
         dragId.current = pieceUnder(e.x, e.y)?.id ?? null;
       }
     },
@@ -172,27 +239,40 @@ export function StudioCanvas({
       if (dragId.current) latest.current.onDragStart(dragId.current);
     },
     onUpdate: (e) => {
-      if (cutStart.current) {
-        setCutLine({ from: cutStart.current, to: toDesign(e.x, e.y) });
+      if (strokeStart.current) {
+        setStroke({ from: strokeStart.current, to: toDesign(e.x, e.y) });
+        return;
+      }
+      const s0 = spinStart.current;
+      if (s0) {
+        const now = angleDeg(s0.centre, toDesign(e.x, e.y));
+        // Add up small steps so crossing ±180° doesn't make the piece jump.
+        let step = now - s0.last;
+        if (step > 180) step -= 360;
+        if (step < -180) step += 360;
+        s0.swept += step;
+        s0.last = now;
+        setSpin({ pieceId: s0.pieceId, rotationDeg: snapAngle(s0.base + s0.swept) });
         return;
       }
       const piece = latest.current.pieces.find((p) => p.id === dragId.current);
       if (!piece) return;
       const { scale } = latest.current.viewport;
-      setDrag({
-        pieceId: piece.id,
-        groupId: piece.groupId,
-        dx: e.translationX / scale,
-        dy: e.translationY / scale,
-      });
+      setDrag({ pieceId: piece.id, dx: e.translationX / scale, dy: e.translationY / scale });
     },
     onDeactivate: (e) => {
-      if (cutStart.current) {
-        if (!e.canceled) latest.current.onCut(cutStart.current, toDesign(e.x, e.y));
+      if (e.canceled) return;
+      if (strokeStart.current) {
+        latest.current.onStroke(strokeStart.current, toDesign(e.x, e.y));
+        return;
+      }
+      const s0 = spinStart.current;
+      if (s0) {
+        latest.current.onRotate(s0.pieceId, snapAngle(s0.base + s0.swept));
         return;
       }
       const piece = latest.current.pieces.find((p) => p.id === dragId.current);
-      if (!piece || e.canceled) return;
+      if (!piece) return;
       const { scale } = latest.current.viewport;
       latest.current.onMove(piece.id, {
         x: piece.position.x + e.translationX / scale,
@@ -201,28 +281,30 @@ export function StudioCanvas({
     },
     onFinalize: () => {
       dragId.current = null;
-      cutStart.current = null;
+      strokeStart.current = null;
+      spinStart.current = null;
       setDrag(null);
-      setCutLine(null);
+      setSpin(null);
+      setStroke(null);
     },
   });
 
   const gesture = useCompetingGestures(pan, tap);
 
-  // While dragging, draw the piece (and its stitched group) where the finger is.
-  const moving = (piece: FabricPiece) =>
-    drag !== null &&
-    (piece.id === drag.pieceId || (drag.groupId !== undefined && piece.groupId === drag.groupId));
-  const shown = (piece: FabricPiece): FabricPiece =>
-    drag && moving(piece)
-      ? { ...piece, position: { x: piece.position.x + drag.dx, y: piece.position.y + drag.dy } }
-      : piece;
+  // While dragging or rotating, draw the piece where the finger has put it.
+  const shown = (piece: FabricPiece): FabricPiece => {
+    if (drag?.pieceId === piece.id) {
+      return {
+        ...piece,
+        position: { x: piece.position.x + drag.dx, y: piece.position.y + drag.dy },
+      };
+    }
+    if (spin?.pieceId === piece.id) return { ...piece, rotationDeg: spin.rotationDeg };
+    return piece;
+  };
 
   const placed = pieces.filter((piece) => piece.status === 'canvas').map(shown);
   const selected = placed.find((piece) => piece.id === selectedId);
-  const groupMates = selected?.groupId
-    ? placed.filter((p) => p.groupId === selected.groupId && p.id !== selected.id)
-    : [];
 
   // The Svg covers the whole frame; its viewBox is the frame in design units.
   const { scale, offsetX, offsetY } = viewport;
@@ -333,17 +415,6 @@ export function StudioCanvas({
                   fill="url(#denim)"
                 />
               ))}
-              {groupMates.map((piece) => (
-                <SvgPolygon
-                  key={`${piece.id}-group`}
-                  points={points(pieceToDesign(piece))}
-                  fill="none"
-                  stroke={studio.stitch}
-                  strokeWidth={2 * px}
-                  strokeDasharray={`${3 * px} ${2 * px}`}
-                  strokeLinejoin="round"
-                />
-              ))}
               {selected ? (
                 <SvgPolygon
                   points={points(pieceToDesign(selected))}
@@ -354,13 +425,21 @@ export function StudioCanvas({
                   strokeLinejoin="round"
                 />
               ) : null}
-              {cutLine ? (
+              {selected && tool === 'rotate' ? (
+                <Circle
+                  cx={selected.position.x}
+                  cy={selected.position.y}
+                  r={4 * px}
+                  fill={studio.selection}
+                />
+              ) : null}
+              {stroke ? (
                 <Line
-                  x1={cutLine.from.x}
-                  y1={cutLine.from.y}
-                  x2={cutLine.to.x}
-                  y2={cutLine.to.y}
-                  stroke={studio.cutLine}
+                  x1={stroke.from.x}
+                  y1={stroke.from.y}
+                  x2={stroke.to.x}
+                  y2={stroke.to.y}
+                  stroke={tool === 'stitch' ? studio.stitch : studio.cutLine}
                   strokeWidth={2 * px}
                   strokeDasharray={`${6 * px} ${4 * px}`}
                   strokeLinecap="round"
@@ -376,6 +455,13 @@ export function StudioCanvas({
               </AppText>
               <AppText variant="caption" color={studio.muted}>
                 Tap a fabric piece below to add it
+              </AppText>
+            </View>
+          ) : null}
+          {spin ? (
+            <View style={styles.anglePill} pointerEvents="none">
+              <AppText variant="label" color={studio.card}>
+                {`${spin.rotationDeg}°`}
               </AppText>
             </View>
           ) : null}
@@ -407,4 +493,13 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   overlay: { ...StyleSheet.absoluteFill },
+  anglePill: {
+    position: 'absolute',
+    top: spacing.sm,
+    alignSelf: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radii.pill,
+    backgroundColor: studio.ink,
+  },
 });

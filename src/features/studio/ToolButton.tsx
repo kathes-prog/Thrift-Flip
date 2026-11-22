@@ -43,7 +43,7 @@ export function ToolButton({ label, icon, onPress, disabled, active }: ToolButto
 
 const styles = StyleSheet.create({
   base: {
-    width: 62,
+    flex: 1,
     alignItems: 'center',
     gap: 4,
     paddingVertical: 6,

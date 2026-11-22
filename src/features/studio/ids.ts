@@ -1,5 +1,5 @@
 /**
- * Owner: P2. New ids for cut fragments and stitch groups. Generated in the UI
+ * Owner: P2. New ids for cut fragments and stitched (joined) pieces. Generated in the UI
  * so the reducer stays pure; unique within a project, which is all ids need.
  */
 let counter = 0;
@@ -14,6 +14,6 @@ export function newFragmentIds(parentId: string): [string, string] {
   return [`${parentId}~${s}a`, `${parentId}~${s}b`];
 }
 
-export function newGroupId(): string {
-  return `group~${stamp()}`;
+export function newMergedId(): string {
+  return `stitched~${stamp()}`;
 }

@@ -13,34 +13,30 @@
  *     - same status, sourceId, originalPieceId, color as the parent
  *     - areaCm2 = parent.areaCm2 × (fragment polygon area / parent polygon area)
  *
- * - MOVE_PIECE moves every piece stitched to it by the same amount.
- * - RESIZE_PIECE scales the outline about the piece's centre; area × factor².
- * - STITCH_PIECES / UNSTITCH_PIECE set or clear groupId (canvas pieces only).
+ * - FLIP_PIECE mirrors the piece as seen on screen (horizontal or vertical).
+ * - STITCH_PIECES joins two overlapping canvas pieces into one piece
+ *   (outline = union, area = sum). Rejected when they don't overlap.
+ * - RETURN_PIECE sends a canvas piece back to the tray (Discard in the Studio).
  *
  * Return the SAME project object when nothing changes.
  */
 import { polygonArea } from '@/geometry/area';
 import { cutPolygon } from '@/geometry/cut';
 import { segmentCrossesPolygon } from '@/geometry/hitTest';
-import { designToLocal } from '@/geometry/transform';
+import { designToLocal, pieceToDesign } from '@/geometry/transform';
+import { unionPolygons } from '@/geometry/union';
 import type { FabricPiece, Project } from '@/model/types';
 
-import type {
-  CutPieceAction,
-  EditAction,
-  MovePieceAction,
-  ResizePieceAction,
-  StitchPiecesAction,
-  UnstitchPieceAction,
-} from '../actions';
-
-/** A resize that would leave a piece smaller than this (cm²) is rejected. */
-const MIN_AREA_CM2 = 1;
+import type { CutPieceAction, EditAction, FlipPieceAction, StitchPiecesAction } from '../actions';
 
 export function handleEditAction(project: Project, action: EditAction): Project {
   switch (action.type) {
-    case 'MOVE_PIECE':
-      return movePiece(project, action);
+    case 'MOVE_PIECE': {
+      const { x, y } = action.position;
+      return updatePiece(project, action.pieceId, (piece) =>
+        piece.position.x === x && piece.position.y === y ? piece : { ...piece, position: { x, y } },
+      );
+    }
     case 'ROTATE_PIECE': {
       const rotationDeg = normalizeDegrees(action.rotationDeg);
       return updatePiece(project, action.pieceId, (piece) =>
@@ -48,52 +44,36 @@ export function handleEditAction(project: Project, action: EditAction): Project 
       );
     }
     case 'FLIP_PIECE':
-      return updatePiece(project, action.pieceId, (piece) => ({
-        ...piece,
-        flipped: !piece.flipped,
-      }));
+      return flipPiece(project, action);
     case 'RECOLOR_PIECE':
       return updatePiece(project, action.pieceId, (piece) =>
         piece.color === action.color ? piece : { ...piece, color: action.color },
       );
     case 'CUT_PIECE':
       return cutPiece(project, action);
-    case 'RESIZE_PIECE':
-      return resizePiece(project, action);
     case 'STITCH_PIECES':
       return stitchPieces(project, action);
-    case 'UNSTITCH_PIECE':
-      return unstitchPiece(project, action);
+    case 'RETURN_PIECE':
+      return updatePiece(project, action.pieceId, (piece) =>
+        piece.status === 'canvas' ? { ...piece, status: 'tray' } : piece,
+      );
   }
 }
 
-/** Move a piece, and every piece stitched to it by the same amount. */
-function movePiece(project: Project, action: MovePieceAction): Project {
-  const piece = project.pieces.find((p) => p.id === action.pieceId);
-  if (!piece) return project;
-  const dx = action.position.x - piece.position.x;
-  const dy = action.position.y - piece.position.y;
-  if (dx === 0 && dy === 0) return project;
-  const moves = (p: FabricPiece) =>
-    p.id === piece.id || (piece.groupId !== undefined && p.groupId === piece.groupId);
-  return {
-    ...project,
-    pieces: project.pieces.map((p) =>
-      moves(p) ? { ...p, position: { x: p.position.x + dx, y: p.position.y + dy } } : p,
+/**
+ * Mirror the piece on screen. The model only mirrors across the piece's own
+ * vertical axis (before rotation), so a screen mirror becomes:
+ *   left-right: flipped toggles, rotation r -> -r
+ *   upside-down: flipped toggles, rotation r -> 180 - r
+ */
+function flipPiece(project: Project, action: FlipPieceAction): Project {
+  return updatePiece(project, action.pieceId, (piece) => ({
+    ...piece,
+    flipped: !piece.flipped,
+    rotationDeg: normalizeDegrees(
+      action.axis === 'horizontal' ? -piece.rotationDeg : 180 - piece.rotationDeg,
     ),
-  };
-}
-
-function resizePiece(project: Project, action: ResizePieceAction): Project {
-  const { factor } = action;
-  if (!Number.isFinite(factor) || factor <= 0 || factor === 1) return project;
-  return updatePiece(project, action.pieceId, (piece) => {
-    const areaCm2 = piece.areaCm2 * factor * factor;
-    if (areaCm2 < MIN_AREA_CM2) return piece;
-    // Local coordinates are centred on the piece, so scaling them keeps it in place.
-    const polygon = piece.polygon.map((p) => ({ x: p.x * factor, y: p.y * factor }));
-    return { ...piece, polygon, areaCm2 };
-  });
+  }));
 }
 
 function stitchPieces(project: Project, action: StitchPiecesAction): Project {
@@ -102,40 +82,39 @@ function stitchPieces(project: Project, action: StitchPiecesAction): Project {
   const a = project.pieces.find((p) => p.id === aId);
   const b = project.pieces.find((p) => p.id === bId);
   if (!a || !b || a.status !== 'canvas' || b.status !== 'canvas') return project;
-  if (a.groupId !== undefined && a.groupId === b.groupId) return project;
-  // Everything already stitched to either piece joins the new group too.
-  const joins = (p: FabricPiece) =>
-    p.id === aId ||
-    p.id === bId ||
-    (a.groupId !== undefined && p.groupId === a.groupId) ||
-    (b.groupId !== undefined && p.groupId === b.groupId);
-  return {
-    ...project,
-    pieces: project.pieces.map((p) => (joins(p) ? { ...p, groupId: action.groupId } : p)),
-  };
-}
 
-function unstitchPiece(project: Project, action: UnstitchPieceAction): Project {
-  const piece = project.pieces.find((p) => p.id === action.pieceId);
-  if (!piece || piece.groupId === undefined) return project;
-  const { groupId } = piece;
-  const rest = project.pieces.filter((p) => p.id !== piece.id && p.groupId === groupId);
-  // A group of one is no group: release the last piece as well.
-  const release = (p: FabricPiece) => p.id === piece.id || (rest.length === 1 && p === rest[0]);
-  return {
-    ...project,
-    pieces: project.pieces.map((p) => {
-      if (!release(p)) return p;
-      const { groupId: _dropped, ...loose } = p;
-      return loose;
-    }),
+  const outline = unionPolygons(pieceToDesign(a), pieceToDesign(b));
+  if (!outline) return project;
+
+  // The joined piece starts unrotated, centred on its own bounding box.
+  const xs = outline.map((p) => p.x);
+  const ys = outline.map((p) => p.y);
+  const centre = {
+    x: (Math.min(...xs) + Math.max(...xs)) / 2,
+    y: (Math.min(...ys) + Math.max(...ys)) / 2,
   };
+  const merged: FabricPiece = {
+    ...a,
+    id: action.mergedId,
+    displayName: `${a.displayName} + ${b.displayName}`,
+    category: 'panel',
+    polygon: outline.map((p) => ({ x: p.x - centre.x, y: p.y - centre.y })),
+    areaCm2: a.areaCm2 + b.areaCm2,
+    position: centre,
+    rotationDeg: 0,
+    flipped: false,
+  };
+
+  // The joined piece takes the first piece's place in the drawing order.
+  const pieces = project.pieces.filter((p) => p.id !== bId).map((p) => (p === a ? merged : p));
+  return { ...project, pieces };
 }
 
 /** Keep angles in [0, 360) so 450° and 90° are the same rotation. */
 function normalizeDegrees(deg: number): number {
   const d = deg % 360;
-  return d < 0 ? d + 360 : d;
+  // `+ 0` turns -0 into 0.
+  return d < 0 ? d + 360 : d + 0;
 }
 
 /**
