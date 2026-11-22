@@ -9,6 +9,7 @@ import {
   pieceToDesign,
   screenToDesign,
 } from '@/geometry/transform';
+import { unionPolygons } from '@/geometry/union';
 import { rect } from '@/model/units';
 import { preset, shoelace } from '@/testUtils';
 
@@ -212,5 +213,48 @@ describe('P2 · drawn cut lines', () => {
 
   test('a line beside the piece does not count, even if its extension would cross it', () => {
     expect(segmentCrossesPolygon(square, { x: 0, y: -20 }, { x: 0, y: -8 })).toBe(false);
+  });
+});
+
+describe('P2 · union (stitch)', () => {
+  const square = (x: number, y: number, size: number) => [
+    { x, y },
+    { x: x + size, y },
+    { x: x + size, y: y + size },
+    { x, y: y + size },
+  ];
+
+  test('overlapping squares join into one outline', () => {
+    const out = unionPolygons(square(0, 0, 10), square(5, 5, 10));
+    expect(out).not.toBeNull();
+    expect(polygonArea(out!)).toBeCloseTo(175, 6);
+    expect(out).toHaveLength(8);
+  });
+
+  test('a plus shape keeps its inside corners', () => {
+    const wide = [
+      { x: -15, y: -5 },
+      { x: 15, y: -5 },
+      { x: 15, y: 5 },
+      { x: -15, y: 5 },
+    ];
+    const tall = wide.map((p) => ({ x: p.y, y: p.x }));
+    const out = unionPolygons(wide, tall);
+    expect(polygonArea(out!)).toBeCloseTo(500, 6);
+    expect(out).toHaveLength(12);
+  });
+
+  test('edges that line up exactly still join', () => {
+    const out = unionPolygons(square(0, 0, 10), square(5, 0, 10));
+    expect(polygonArea(out!)).toBeCloseTo(150, 2);
+  });
+
+  test('one shape inside the other gives the outer one', () => {
+    expect(polygonArea(unionPolygons(square(0, 0, 10), square(2, 2, 3))!)).toBe(100);
+    expect(polygonArea(unionPolygons(square(2, 2, 3), square(0, 0, 10))!)).toBe(100);
+  });
+
+  test("shapes that don't overlap can't be joined", () => {
+    expect(unionPolygons(square(0, 0, 10), square(20, 0, 10))).toBeNull();
   });
 });

@@ -40,9 +40,8 @@ export function applyProjectAction(project: Project, action: ProjectAction): Pro
     case 'FLIP_PIECE':
     case 'RECOLOR_PIECE':
     case 'CUT_PIECE':
-    case 'RESIZE_PIECE':
     case 'STITCH_PIECES':
-    case 'UNSTITCH_PIECE':
+    case 'RETURN_PIECE':
       return handleEditAction(project, action);
   }
 }

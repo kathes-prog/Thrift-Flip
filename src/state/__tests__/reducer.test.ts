@@ -29,7 +29,7 @@ test('UNDO restores the previous project exactly', () => {
 
 test('a rejected or no-op action records nothing', () => {
   const start = initHistory(emptyProject());
-  const next = reducer(start, { type: 'FLIP_PIECE', pieceId: 'x' });
+  const next = reducer(start, { type: 'FLIP_PIECE', pieceId: 'x', axis: 'horizontal' });
   expect(next).toBe(start);
 });
 

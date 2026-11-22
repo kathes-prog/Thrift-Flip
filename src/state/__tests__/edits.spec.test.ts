@@ -1,4 +1,7 @@
 /** Owner: P2 · requirements 4 and 5. Remove `.skip` when built. */
+import { polygonArea } from '@/geometry/area';
+import { pieceToDesign } from '@/geometry/transform';
+import type { Point } from '@/model/units';
 import type { CutPieceAction, StitchPiecesAction } from '@/state/actions';
 import { initHistory, rootReducer } from '@/state/reducer';
 import { applyAll, preset } from '@/testUtils';
@@ -11,10 +14,10 @@ describe('P2 · move, rotate, flip, recolour', () => {
     const next = applyAll(
       p,
       { type: 'ROTATE_PIECE', pieceId: 'jeans-pocket-l', rotationDeg: 90 },
-      { type: 'FLIP_PIECE', pieceId: 'jeans-pocket-l' },
+      { type: 'FLIP_PIECE', pieceId: 'jeans-pocket-l', axis: 'horizontal' },
     );
     expect(piece(next, 'jeans-pocket-l')).toMatchObject({
-      rotationDeg: 90,
+      rotationDeg: 270,
       flipped: true,
       areaCm2: 250,
     });
@@ -90,7 +93,7 @@ describe('P2 · edit edge cases', () => {
 
   test('edits to a piece that does not exist change nothing', () => {
     const p = preset('skirt-a');
-    expect(applyAll(p, { type: 'FLIP_PIECE', pieceId: 'nope' })).toBe(p);
+    expect(applyAll(p, { type: 'FLIP_PIECE', pieceId: 'nope', axis: 'vertical' })).toBe(p);
     expect(applyAll(p, { ...cut, pieceId: 'nope' })).toBe(p);
   });
 
@@ -122,14 +125,54 @@ describe('P2 · edit edge cases', () => {
     expect(piece(back, 'second-panel')?.rotationDeg).toBe(270);
   });
 
-  test('flipping twice returns to the original orientation', () => {
-    const p = preset('skirt-a');
-    const next = applyAll(
-      p,
-      { type: 'FLIP_PIECE', pieceId: 'second-panel' },
-      { type: 'FLIP_PIECE', pieceId: 'second-panel' },
+  test('flipping twice on the same axis returns to the original orientation', () => {
+    const p = applyAll(preset('skirt-a'), {
+      type: 'ROTATE_PIECE',
+      pieceId: 'second-panel',
+      rotationDeg: 30,
+    });
+    for (const axis of ['horizontal', 'vertical'] as const) {
+      const flip = { type: 'FLIP_PIECE' as const, pieceId: 'second-panel', axis };
+      const next = applyAll(p, flip, flip);
+      expect(piece(next, 'second-panel')).toMatchObject({ flipped: false, rotationDeg: 30 });
+    }
+  });
+
+  test('flips mirror the piece as it looks on screen', () => {
+    // A right triangle, turned 30°, so any mistake shows up in the outline.
+    const base = preset('skirt-a');
+    const tri = {
+      ...piece(base, 'second-panel')!,
+      polygon: [
+        { x: -5, y: -5 },
+        { x: 10, y: -5 },
+        { x: -5, y: 5 },
+      ],
+      rotationDeg: 30,
+    };
+    const p = { ...base, pieces: base.pieces.map((x) => (x.id === tri.id ? tri : x)) };
+    const { x: cx, y: cy } = tri.position;
+    const sorted = (pts: Point[]) =>
+      pts
+        .map((q) => ({ x: Math.round(q.x * 1e6) / 1e6, y: Math.round(q.y * 1e6) / 1e6 }))
+        .sort((a, b) => a.x - b.x || a.y - b.y);
+    const before = pieceToDesign(tri);
+
+    const h = piece(
+      applyAll(p, { type: 'FLIP_PIECE', pieceId: tri.id, axis: 'horizontal' }),
+      tri.id,
+    )!;
+    expect(sorted(pieceToDesign(h))).toEqual(
+      sorted(before.map((q) => ({ x: 2 * cx - q.x, y: q.y }))),
     );
-    expect(piece(next, 'second-panel')?.flipped).toBe(piece(p, 'second-panel')?.flipped);
+
+    const v = piece(
+      applyAll(p, { type: 'FLIP_PIECE', pieceId: tri.id, axis: 'vertical' }),
+      tri.id,
+    )!;
+    expect(sorted(pieceToDesign(v))).toEqual(
+      sorted(before.map((q) => ({ x: q.x, y: 2 * cy - q.y }))),
+    );
   });
 
   test('fragments stay where the parent was, in its place in the list', () => {
@@ -156,7 +199,7 @@ describe('P2 · edit edge cases', () => {
     const turned = applyAll(
       preset('skirt-a'),
       { type: 'ROTATE_PIECE', pieceId: 'second-panel', rotationDeg: 30 },
-      { type: 'FLIP_PIECE', pieceId: 'second-panel' },
+      { type: 'FLIP_PIECE', pieceId: 'second-panel', axis: 'horizontal' },
     );
     const next = applyAll(turned, cut);
     const a = piece(next, 'frag-a')!;
@@ -212,90 +255,62 @@ describe('P2 · cut must be drawn across the piece', () => {
   });
 });
 
-describe('P2 · resize', () => {
-  test('scales the outline about its centre and the area by factor²', () => {
-    const p = preset('skirt-a');
-    const before = piece(p, 'second-panel')!;
-    const next = applyAll(p, { type: 'RESIZE_PIECE', pieceId: 'second-panel', factor: 1.5 });
-    const after = piece(next, 'second-panel')!;
-    expect(after.areaCm2).toBeCloseTo(before.areaCm2 * 2.25);
-    expect(after.position).toEqual(before.position);
-    expect(after.polygon[0]!.x).toBeCloseTo(before.polygon[0]!.x * 1.5);
+describe('P2 · stitch', () => {
+  // second-panel: 20 × 20 at (90, 35), so x 80–100, y 25–45.
+  // jeans-pocket-l: 12.5 × 20 (250 cm²). Moved to (100, 35) it overlaps the panel by 6.25 × 20.
+  const stitch = (a: string, b: string, mergedId = 'joined'): StitchPiecesAction => ({
+    type: 'STITCH_PIECES',
+    pieceIds: [a, b],
+    mergedId,
+  });
+  const overlapping = () =>
+    applyAll(preset('skirt-a'), {
+      type: 'MOVE_PIECE',
+      pieceId: 'jeans-pocket-l',
+      position: { x: 100, y: 35 },
+    });
+
+  test('two overlapping pieces become one piece with both areas', () => {
+    const p = overlapping();
+    // The joined piece takes the panel's place once the pocket is gone.
+    const index = p.pieces
+      .filter((x) => x.id !== 'jeans-pocket-l')
+      .findIndex((x) => x.id === 'second-panel');
+    const next = applyAll(p, stitch('second-panel', 'jeans-pocket-l'));
+    expect(next.pieces).toHaveLength(p.pieces.length - 1);
+    expect(piece(next, 'second-panel')).toBeUndefined();
+    expect(piece(next, 'jeans-pocket-l')).toBeUndefined();
+    const joined = piece(next, 'joined')!;
+    expect(next.pieces[index]).toBe(joined);
+    expect(joined).toMatchObject({ status: 'canvas', areaCm2: 650, rotationDeg: 0 });
+    // The outline is the two shapes joined: 400 + 250 − 125 overlap.
+    expect(polygonArea(joined.polygon)).toBeCloseTo(525, 2);
+    expect(joined.position.x).toBeCloseTo(93.125, 2);
+    expect(joined.position.y).toBeCloseTo(35, 2);
   });
 
-  test('a factor of 1, zero or less changes nothing', () => {
+  test('pieces that do not overlap, tray pieces, or the same piece twice are rejected', () => {
     const p = preset('skirt-a');
-    for (const factor of [1, 0, -2, Number.NaN]) {
-      expect(applyAll(p, { type: 'RESIZE_PIECE', pieceId: 'second-panel', factor })).toBe(p);
-    }
+    expect(applyAll(p, stitch('second-panel', 'jeans-pocket-l'))).toBe(p);
+    expect(applyAll(p, stitch('second-panel', 'jeans-waistband'))).toBe(p);
+    expect(applyAll(p, stitch('second-panel', 'second-panel'))).toBe(p);
   });
 
-  test('cannot shrink a piece below 1 cm²', () => {
-    const p = preset('skirt-a');
-    expect(applyAll(p, { type: 'RESIZE_PIECE', pieceId: 'second-panel', factor: 0.01 })).toBe(p);
+  test('one undo brings both pieces back', () => {
+    const p = overlapping();
+    let state = initHistory(p);
+    state = rootReducer(state, stitch('second-panel', 'jeans-pocket-l'));
+    state = rootReducer(state, { type: 'UNDO' });
+    expect(state.present).toBe(p);
   });
 });
 
-describe('P2 · stitch', () => {
-  const stitch = (a: string, b: string, groupId = 'g1'): StitchPiecesAction => ({
-    type: 'STITCH_PIECES',
-    pieceIds: [a, b],
-    groupId,
-  });
-
-  test('stitched pieces move together', () => {
+describe('P2 · discard back to the tray', () => {
+  test('a canvas piece goes back to the tray; anything else is left alone', () => {
     const p = preset('skirt-a');
-    const yoke = piece(p, 'jeans-yoke-l')!;
-    const pocket = piece(p, 'jeans-pocket-l')!;
-    const next = applyAll(p, stitch('jeans-yoke-l', 'jeans-pocket-l'), {
-      type: 'MOVE_PIECE',
-      pieceId: 'jeans-pocket-l',
-      position: { x: pocket.position.x + 10, y: pocket.position.y - 5 },
-    });
-    expect(piece(next, 'jeans-yoke-l')?.position).toEqual({
-      x: yoke.position.x + 10,
-      y: yoke.position.y - 5,
-    });
-    expect(piece(next, 'second-panel')?.position).toEqual(piece(p, 'second-panel')?.position);
-  });
-
-  test('stitching into an existing group merges the groups', () => {
-    const next = applyAll(
-      preset('skirt-a'),
-      stitch('jeans-yoke-l', 'jeans-pocket-l', 'g1'),
-      stitch('second-panel', 'jeans-pocket-l', 'g2'),
-    );
-    for (const id of ['jeans-yoke-l', 'jeans-pocket-l', 'second-panel']) {
-      expect(piece(next, id)?.groupId).toBe('g2');
-    }
-  });
-
-  test('a piece cannot be stitched to itself, to a tray piece, or twice', () => {
-    const p = preset('skirt-a');
-    expect(applyAll(p, stitch('second-panel', 'second-panel'))).toBe(p);
-    expect(applyAll(p, stitch('second-panel', 'jeans-waistband'))).toBe(p);
-    const once = applyAll(p, stitch('second-panel', 'jeans-yoke-l'));
-    expect(applyAll(once, stitch('second-panel', 'jeans-yoke-l', 'g9'))).toBe(once);
-  });
-
-  test('unstitching the second-last piece frees both', () => {
-    const next = applyAll(preset('skirt-a'), stitch('jeans-yoke-l', 'jeans-pocket-l'), {
-      type: 'UNSTITCH_PIECE',
-      pieceId: 'jeans-pocket-l',
-    });
-    expect(piece(next, 'jeans-yoke-l')?.groupId).toBeUndefined();
-    expect(piece(next, 'jeans-pocket-l')?.groupId).toBeUndefined();
-  });
-
-  test('unstitching one of three leaves the other two stitched', () => {
-    const next = applyAll(
-      preset('skirt-a'),
-      stitch('jeans-yoke-l', 'jeans-pocket-l'),
-      stitch('second-panel', 'jeans-pocket-l', 'g2'),
-      { type: 'UNSTITCH_PIECE', pieceId: 'second-panel' },
-    );
-    expect(piece(next, 'second-panel')?.groupId).toBeUndefined();
-    expect(piece(next, 'jeans-yoke-l')?.groupId).toBe('g2');
-    expect(piece(next, 'jeans-pocket-l')?.groupId).toBe('g2');
+    const next = applyAll(p, { type: 'RETURN_PIECE', pieceId: 'second-panel' });
+    expect(piece(next, 'second-panel')?.status).toBe('tray');
+    expect(applyAll(p, { type: 'RETURN_PIECE', pieceId: 'jeans-waistband' })).toBe(p);
+    expect(applyAll(p, { type: 'RETURN_PIECE', pieceId: 'nope' })).toBe(p);
   });
 });
