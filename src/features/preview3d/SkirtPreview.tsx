@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/refs, react-hooks/immutability, react/no-unknown-property */
 import { Canvas, useFrame } from '@react-three/fiber/native';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PanResponder, StyleSheet, View } from 'react-native';
@@ -70,7 +71,7 @@ function buildPieceGeometry(poly: P[]): THREE.BufferGeometry | null {
       pts.map((p) => new THREE.Vector2(p.x, p.y)),
       []
     );
-  } catch (e) {
+  } catch {
     triIndexes = [];
   }
   if (triIndexes.length === 0) {
