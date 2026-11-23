@@ -14,7 +14,7 @@ export async function saveProject(project: Project): Promise<void> {
 
 export async function loadProject(): Promise<Project | null> {
   const file = new File(Paths.document, PROJECT_FILE);
-  
+
   if (!file.exists) {
     return null;
   }
@@ -23,12 +23,12 @@ export async function loadProject(): Promise<Project | null> {
     // Added 'await' here because file.text() returns a Promise in Expo SDK 58
     const content = await file.text();
     const project = JSON.parse(content) as Project;
-    
+
     if (project.schemaVersion !== SCHEMA_VERSION) {
       console.warn('Project schema version mismatch');
       return null;
     }
-    
+
     return project;
   } catch (e) {
     console.error('Failed to load project', e);

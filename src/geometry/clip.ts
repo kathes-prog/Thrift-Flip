@@ -6,7 +6,8 @@ const EPS = 1e-9;
 function signedArea(poly: Polygon): number {
   let a = 0;
   for (let i = 0; i < poly.length; i++) {
-    const p = poly[i]!, q = poly[(i + 1) % poly.length]!;
+    const p = poly[i]!,
+      q = poly[(i + 1) % poly.length]!;
     a += p.x * q.y - q.x * p.y;
   }
   return a / 2;
@@ -35,7 +36,8 @@ function dedupe(poly: Point[]): Point[] {
   while (
     out.length > 1 &&
     Math.hypot(out[0]!.x - out[out.length - 1]!.x, out[0]!.y - out[out.length - 1]!.y) <= 1e-7
-  ) out.pop();
+  )
+    out.pop();
   return out;
 }
 
@@ -43,9 +45,7 @@ export function clipToRegion(subject: Polygon, region: GuideRegion): Polygon[] {
   if (subject.length < 3 || region.polygon.length < 3) return [];
 
   // Normalize so the interior is always on the left of every clip edge
-  const clip = signedArea(region.polygon) >= 0
-    ? region.polygon
-    : [...region.polygon].reverse();
+  const clip = signedArea(region.polygon) >= 0 ? region.polygon : [...region.polygon].reverse();
 
   let output: Point[] = [...subject];
 
