@@ -5,12 +5,12 @@ import { colors, spacing } from '@/theme';
 export function CuttingPlanSummary({ project }: { project: Project }) {
   const placed = project.pieces.filter((p) => p.status === 'canvas');
   const usedArea = placed.reduce((sum, p) => sum + p.areaCm2, 0);
-  const sources = new Set(placed.map(p => p.sourceId)).size;
+  const sources = new Set(placed.map((p) => p.sourceId)).size;
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Cut & Stitch Plan</Text>
-      
+
       <View style={styles.statRow}>
         <View style={styles.stat}>
           <Text style={styles.statValue}>{placed.length}</Text>

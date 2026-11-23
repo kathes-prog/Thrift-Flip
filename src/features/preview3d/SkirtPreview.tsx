@@ -69,7 +69,7 @@ function buildPieceGeometry(poly: P[]): THREE.BufferGeometry | null {
   try {
     triIndexes = THREE.ShapeUtils.triangulateShape(
       pts.map((p) => new THREE.Vector2(p.x, p.y)),
-      []
+      [],
     );
   } catch {
     triIndexes = [];
@@ -204,7 +204,7 @@ export function SkirtPreview({ project }: { project: Project }) {
       onPanResponderTerminate: () => {
         isDragging.current = false;
       },
-    })
+    }),
   ).current;
 
   return (
@@ -220,11 +220,7 @@ export function SkirtPreview({ project }: { project: Project }) {
               console.log('R3F created, size:', s.size);
             }}
           >
-            <SceneContent
-              project={project}
-              isDragging={isDragging}
-              dragOffset={dragOffset}
-            />
+            <SceneContent project={project} isDragging={isDragging} dragOffset={dragOffset} />
           </Canvas>
         )}
       </View>
