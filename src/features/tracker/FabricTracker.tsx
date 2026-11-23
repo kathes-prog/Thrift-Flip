@@ -7,7 +7,6 @@ import { StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/AppText';
 import { Card } from '@/components/Card';
-import { StubBanner } from '@/components/StubBanner';
 import { formatArea } from '@/model/units';
 import { selectTracker } from '@/state/selectors';
 import { useProject } from '@/state/ProjectContext';
@@ -26,7 +25,6 @@ export function FabricTracker() {
 
   return (
     <Card>
-      <StubBanner owner="P1" note="Selectors return zeros until P1 builds them." />
       <AppText variant="heading">Fabric tracker</AppText>
       {rows.map(([label, value]) => (
         <View key={label} style={styles.row}>

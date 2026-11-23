@@ -16,14 +16,42 @@ import type { SourceAction } from '../actions';
 
 export function handleSourceAction(project: Project, action: SourceAction): Project {
   switch (action.type) {
-    case 'ADD_GARMENT':
-      // TODO(P1)
-      return project;
+    case 'ADD_GARMENT': {
+      const { source, pieces } = action;
+      if (
+        source.type === 'scrap' ||
+        project.sources.some((existing) => existing.type === source.type)
+      ) {
+        return project;
+      }
+
+      return {
+        ...project,
+        sources: [...project.sources, source],
+        pieces: [
+          ...project.pieces,
+          ...pieces.map((piece) => ({ ...piece, status: 'tray' as const })),
+        ],
+      };
+    }
     case 'ADD_SCRAP':
-      // TODO(P1)
-      return project;
-    case 'SELECT_MODE':
-      // TODO(P1)
-      return project;
+      return {
+        ...project,
+        sources: [...project.sources, action.source],
+        pieces: [...project.pieces, action.piece],
+      };
+    case 'SELECT_MODE': {
+      const current = project.mode;
+      const next = action.mode;
+      if (current?.kind === 'freestyle' && next.kind === 'freestyle') return project;
+      if (
+        current?.kind === 'pattern' &&
+        next.kind === 'pattern' &&
+        current.patternId === next.patternId
+      ) {
+        return project;
+      }
+      return { ...project, mode: next };
+    }
   }
 }

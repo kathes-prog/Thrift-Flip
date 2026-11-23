@@ -2,48 +2,100 @@
  * Owner: P1. Choose the jeans photo, then Analyze garment loads the
  * ten-piece sample inventory with a visible "sample analysis" label.
  */
-import { router } from 'expo-router';
-import { Alert } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useState } from 'react';
+import { Alert, Image, StyleSheet } from 'react-native';
 
 import { AppText } from '@/components/AppText';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Screen } from '@/components/Screen';
-import { StubBanner } from '@/components/StubBanner';
 import { jeansSource, makeJeansPieces } from '@/fixtures/jeans';
-import { pickPhoto } from '@/intake/photos';
+import { makeSecondGarmentPieces, secondGarmentSource } from '@/fixtures/secondGarment';
+import { copyPhotoToDocuments, pickPhoto, type PickedPhoto } from '@/intake/photos';
 import { useProject } from '@/state/ProjectContext';
-import { colors } from '@/theme';
+import { colors, radii } from '@/theme';
 
 export default function NewGarment() {
-  const { dispatch } = useProject();
+  const { from } = useLocalSearchParams<{ from?: string }>();
+  const { project, dispatch } = useProject();
+  const [photo, setPhoto] = useState<PickedPhoto | null>(null);
+  const [busy, setBusy] = useState(false);
+  const hasOriginal = project.sources.some((source) => source.type === 'original-garment');
+  const garmentLimitReached = project.sources.some(
+    (source) => source.type === 'additional-garment',
+  );
 
   async function choosePhoto() {
+    setBusy(true);
     try {
-      await pickPhoto();
-    } catch (e) {
-      Alert.alert('Not built yet', String(e));
+      const selected = await pickPhoto();
+      if (selected) setPhoto(selected);
+    } catch {
+      Alert.alert('Could not choose a photo', 'Try opening your photo library again.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function analyzeGarment() {
+    if (!photo || busy || garmentLimitReached) return;
+
+    setBusy(true);
+    try {
+      const photoPath = await copyPhotoToDocuments(photo.uri);
+      const source = hasOriginal ? secondGarmentSource : jeansSource;
+      const pieces = hasOriginal ? makeSecondGarmentPieces() : makeJeansPieces();
+      dispatch({ type: 'ADD_GARMENT', source: { ...source, photoPath }, pieces });
+      if (from === 'materials') router.back();
+      else router.push('/garment-map');
+    } catch {
+      Alert.alert('Could not save the photo', 'Try again or choose a different photo.');
+    } finally {
+      setBusy(false);
     }
   }
 
   return (
-    <Screen title="New Garment">
-      <StubBanner
-        owner="P1"
-        note="Photo picker and preview. Analyze dispatches ADD_GARMENT, which is a no-op until P1 builds it."
-      />
-      <Card>
-        <AppText color={colors.inkMuted}>No photo selected.</AppText>
-        <Button label="Choose photo" icon="photo" variant="secondary" onPress={choosePhoto} />
-      </Card>
-      <Button
-        label="Analyze garment"
-        icon="garment"
-        onPress={() => {
-          dispatch({ type: 'ADD_GARMENT', source: jeansSource, pieces: makeJeansPieces() });
-          router.push('/garment-map');
-        }}
-      />
+    <Screen title={hasOriginal ? 'Add Garment' : 'New Garment'}>
+      {garmentLimitReached ? (
+        <AppText color={colors.inkMuted}>This project already has two garments.</AppText>
+      ) : (
+        <>
+          <AppText color={colors.inkMuted}>
+            Sample analysis uses a preset inventory for the garment you photograph.
+          </AppText>
+          <Card>
+            {photo ? (
+              <Image
+                accessibilityLabel="Selected garment photo"
+                source={{ uri: photo.uri }}
+                style={styles.preview}
+                resizeMode="contain"
+              />
+            ) : (
+              <AppText color={colors.inkMuted}>Choose a photo to analyze your garment.</AppText>
+            )}
+            <Button
+              label={photo ? 'Change photo' : 'Choose photo'}
+              icon="photo"
+              variant="secondary"
+              onPress={choosePhoto}
+              disabled={busy}
+            />
+          </Card>
+          <Button
+            label="Analyze garment"
+            icon="garment"
+            onPress={analyzeGarment}
+            disabled={!photo || busy}
+          />
+        </>
+      )}
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  preview: { width: '100%', height: 220, borderRadius: radii.md },
+});

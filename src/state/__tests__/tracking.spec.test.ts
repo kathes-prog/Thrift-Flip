@@ -19,7 +19,7 @@ function expectInvariant(project: Project) {
   expect(t.usedCm2 + t.availableCm2 + t.discardedCm2).toBeCloseTo(t.recoveredCm2, 6);
 }
 
-describe.skip('P1 · sources', () => {
+describe('P1 · sources', () => {
   test('ADD_GARMENT adds the jeans and their 10 pieces to the tray', () => {
     const p = applyAll(emptyProject(), {
       type: 'ADD_GARMENT',
@@ -53,7 +53,7 @@ describe.skip('P1 · sources', () => {
   });
 });
 
-describe.skip('P1 · tracker and shortage', () => {
+describe('P1 · tracker and shortage', () => {
   test('jeans recover 11,856 cm², all available', () => {
     const t = selectTracker(preset('jeans'));
     expect(t.recoveredCm2).toBe(11_856);
@@ -83,7 +83,7 @@ describe.skip('P1 · tracker and shortage', () => {
   });
 });
 
-describe.skip('P1 · inventory rules', () => {
+describe('P1 · inventory rules', () => {
   test('pocket sequence: place, store, restore, discard', () => {
     const start = preset('jeans');
 
