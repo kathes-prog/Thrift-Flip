@@ -34,24 +34,51 @@ export interface PatternFit {
 }
 
 export function selectTracker(project: Project): TrackerTotals {
-  // TODO(P1): stub returns zeros so screens render.
+  let recoveredCm2 = 0;
+  let usedCm2 = 0;
+  let trayCm2 = 0;
+  let storedCm2 = 0;
+  let discardedCm2 = 0;
+
+  for (const { areaCm2, status } of project.pieces) {
+    recoveredCm2 += areaCm2;
+    switch (status) {
+      case 'canvas':
+        usedCm2 += areaCm2;
+        break;
+      case 'tray':
+        trayCm2 += areaCm2;
+        break;
+      case 'stored':
+        storedCm2 += areaCm2;
+        break;
+      case 'discarded':
+        discardedCm2 += areaCm2;
+        break;
+    }
+  }
+
   return {
-    recoveredCm2: 0,
-    usedCm2: 0,
-    availableCm2: 0,
-    storedCm2: 0,
-    discardedCm2: 0,
-    percentUsed: 0,
+    recoveredCm2,
+    usedCm2,
+    availableCm2: trayCm2 + storedCm2,
+    storedCm2,
+    discardedCm2,
+    percentUsed: recoveredCm2 === 0 ? 0 : (usedCm2 / recoveredCm2) * 100,
   };
 }
 
 export function selectPatternFit(project: Project, pattern: Pattern): PatternFit {
-  // TODO(P1): stub reports no shortage.
+  const { recoveredCm2, discardedCm2 } = selectTracker(project);
+  const requiredCm2 = pattern.estimatedAreaCm2;
+  const usableCm2 = recoveredCm2 - discardedCm2;
+  const shortageCm2 = Math.max(0, requiredCm2 - usableCm2);
+
   return {
     patternId: pattern.id,
-    requiredCm2: pattern.estimatedAreaCm2,
-    usableCm2: 0,
-    shortageCm2: 0,
-    eligible: true,
+    requiredCm2,
+    usableCm2,
+    shortageCm2,
+    eligible: shortageCm2 === 0,
   };
 }

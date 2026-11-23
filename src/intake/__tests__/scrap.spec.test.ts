@@ -3,7 +3,7 @@ import { createScrap, validateScrapInput } from '@/intake/scrap';
 
 const photoPath = 'images/scrap.jpg';
 
-describe.skip('P1 · scrap form', () => {
+describe('P1 · scrap form', () => {
   test.each([
     ['', '30', 'width'],
     ['30', '', 'length'],
