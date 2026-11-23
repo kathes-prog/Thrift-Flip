@@ -61,12 +61,12 @@ export default function Studio() {
   const tracker = p1Tracker.recoveredCm2 > 0 ? p1Tracker : fallbackTotals(project);
 
   // TEMP: give an empty project the sample pieces so every tool can be tried.
-  const isEmpty = project.pieces.length === 0;
-  useEffect(() => {
-    if (!isEmpty) return;
-    const sample = testPieceProject(project);
-    if (sample) dispatch({ type: 'LOAD_PROJECT', project: sample });
-  }, [isEmpty, project, dispatch]);
+  // const isEmpty = project.pieces.length === 0;
+  // useEffect(() => {
+  //   if (!isEmpty) return;
+  //   const sample = testPieceProject(project);
+  //   if (sample) dispatch({ type: 'LOAD_PROJECT', project: sample });
+  // }, [isEmpty, project, dispatch]);
 
   // A selection only counts while that piece is on the canvas (undo or a cut can remove it).
   const selected = onCanvas.find((p) => p.id === selectedId);
