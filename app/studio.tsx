@@ -8,6 +8,7 @@
  *   whether it may go on the canvas (e.g. a third jeans pocket is rejected).
  * - Discard sends the selection back to the tray (RETURN_PIECE); Store sends
  *   P1's STORE_PIECE. Reset sends every canvas piece back (CLEAR_CANVAS).
+ * - Uncut joins a cut half back with its other half, any time after the cut.
  * - Rotate, Cut and Stitch are finger gestures on the canvas (StudioCanvas).
  * - The 3D view is P3's <SkirtPreview />. The sheet's totals come from P1's
  *   selectTracker() (with a temporary fallback while it returns zeros).
@@ -106,6 +107,20 @@ export default function Studio() {
     if (attempt({ type: 'CLEAR_CANVAS' }, 'The canvas is already empty.')) {
       setSelectedId(null);
       setOpenTool(null);
+    }
+  };
+
+  /** Uncut: the selected half and its other half become one piece again, any time after the cut. */
+  const joinBack = () => {
+    if (!selected) return;
+    const done = attempt(
+      { type: 'UNCUT_PIECE', pieceId: selected.id },
+      "Can't uncut: its other half was cut again, stitched or thrown away.",
+    );
+    if (done) {
+      setOpenTool(null);
+      // Keep the joined piece selected (it gets back the original piece's id).
+      if (selected.cutFrom) setSelectedId(selected.cutFrom.parent.id);
     }
   };
 
@@ -228,6 +243,12 @@ export default function Studio() {
       disabled: !selected,
       active: tool === 'cut',
       onPress: () => toggleTool('cut'),
+    },
+    {
+      label: 'Uncut',
+      icon: 'uncut',
+      disabled: !selected?.cutFrom,
+      onPress: joinBack,
     },
     {
       label: 'Stitch',

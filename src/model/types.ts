@@ -67,6 +67,17 @@ export interface FabricPiece {
   status: PieceStatus;
   /** Stitch (post-demo): pieces sharing a groupId move together. */
   groupId?: string;
+  /**
+   * Cut halves only: the piece this was cut from, exactly as it was, and the
+   * id of the other half. Lets "Join back" undo a cut made any time earlier.
+   * Absent on uncut pieces and on stitched pieces.
+   */
+  cutFrom?: CutOrigin;
+}
+
+export interface CutOrigin {
+  parent: FabricPiece;
+  siblingId: string;
 }
 
 // ---------------------------------------------------------------- patterns

@@ -13,6 +13,11 @@
  *     - same status, sourceId, originalPieceId, color as the parent
  *     - areaCm2 = parent.areaCm2 × (fragment polygon area / parent polygon area)
  *
+ * - Each fragment records its parent and its sibling (cutFrom), so
+ *   UNCUT_PIECE can join the two halves back any time later.
+ * - UNCUT_PIECE restores the parent where the chosen half is now and removes
+ *   the other half. Rejected when the other half was cut again, stitched or
+ *   discarded.
  * - FLIP_PIECE mirrors the piece as seen on screen (horizontal or vertical).
  * - STITCH_PIECES joins two overlapping canvas pieces into one piece
  *   (outline = union, area = sum). Rejected when they don't overlap.
@@ -28,7 +33,13 @@ import { designToLocal, pieceToDesign } from '@/geometry/transform';
 import { unionPolygons } from '@/geometry/union';
 import type { FabricPiece, Project } from '@/model/types';
 
-import type { CutPieceAction, EditAction, FlipPieceAction, StitchPiecesAction } from '../actions';
+import type {
+  CutPieceAction,
+  EditAction,
+  FlipPieceAction,
+  StitchPiecesAction,
+  UncutPieceAction,
+} from '../actions';
 
 export function handleEditAction(project: Project, action: EditAction): Project {
   switch (action.type) {
@@ -52,6 +63,8 @@ export function handleEditAction(project: Project, action: EditAction): Project 
       );
     case 'CUT_PIECE':
       return cutPiece(project, action);
+    case 'UNCUT_PIECE':
+      return uncutPiece(project, action);
     case 'STITCH_PIECES':
       return stitchPieces(project, action);
     case 'RETURN_PIECE':
@@ -103,7 +116,7 @@ function stitchPieces(project: Project, action: StitchPiecesAction): Project {
     y: (Math.min(...ys) + Math.max(...ys)) / 2,
   };
   const merged: FabricPiece = {
-    ...a,
+    ...withoutCutFrom(a),
     id: action.mergedId,
     displayName: `${a.displayName} + ${b.displayName}`,
     category: 'panel',
@@ -167,10 +180,51 @@ function cutPiece(project: Project, action: CutPieceAction): Project {
     category: 'fragment',
     polygon,
     areaCm2: parent.areaCm2 * (polygonArea(polygon) / parentArea),
+    cutFrom: { parent, siblingId: action.fragmentIds[1 - i]! },
   }));
 
   // Fragments take the parent's place in the list, so drawing order doesn't change.
   const pieces = [...project.pieces];
   pieces.splice(index, 1, ...fragments);
   return { ...project, pieces };
+}
+
+/**
+ * The chosen half's other half, when the two can still be joined back:
+ * it must still exist (not cut again or stitched) and not be discarded.
+ */
+export function uncutPartner(project: Project, piece: FabricPiece): FabricPiece | null {
+  if (!piece.cutFrom) return null;
+  const { siblingId } = piece.cutFrom;
+  const sibling = project.pieces.find((p) => p.id === siblingId);
+  return sibling && sibling.status !== 'discarded' ? sibling : null;
+}
+
+function uncutPiece(project: Project, action: UncutPieceAction): Project {
+  const index = project.pieces.findIndex((p) => p.id === action.pieceId);
+  const piece = project.pieces[index];
+  if (!piece?.cutFrom) return project;
+  const sibling = uncutPartner(project, piece);
+  if (!sibling) return project;
+
+  // The halves keep the parent's local coordinates, so the parent drawn with
+  // this half's placement covers this half exactly and adds the other half
+  // back on in its original spot.
+  const restored: FabricPiece = {
+    ...piece.cutFrom.parent,
+    position: piece.position,
+    rotationDeg: piece.rotationDeg,
+    flipped: piece.flipped,
+    status: piece.status,
+  };
+  const pieces = project.pieces
+    .map((p, i) => (i === index ? restored : p))
+    .filter((p) => p.id !== sibling.id);
+  return { ...project, pieces };
+}
+
+function withoutCutFrom(piece: FabricPiece): FabricPiece {
+  const copy = { ...piece };
+  delete copy.cutFrom;
+  return copy;
 }

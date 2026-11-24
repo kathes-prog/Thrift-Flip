@@ -16,6 +16,7 @@ export const iconNames = [
   'scrap',
   'move',
   'cut',
+  'uncut',
   'rotate',
   'flip',
   'color',
@@ -79,6 +80,8 @@ function glyph(name: IconName, s: StrokeProps) {
           <Path d="M8 16L19 4M16 16L5 4" {...s} />
         </>
       );
+    case 'uncut':
+      return <Path d="M2 6h6v12H2zM16 6h6v12h-6zM10 9l2 3-2 3M14 9l-2 3 2 3" {...s} />;
     case 'rotate':
       return <Path d="M20 12a8 8 0 1 1-3-6.2M20 4v5h-5" {...s} />;
     case 'flip':

@@ -34,7 +34,13 @@ export function ToolButton({ label, icon, onPress, disabled, active }: ToolButto
       ]}
     >
       <Icon name={icon} size={24} color={color} />
-      <AppText variant="caption" color={color} style={styles.label}>
+      <AppText
+        variant="caption"
+        color={color}
+        style={styles.label}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+      >
         {label}
       </AppText>
     </Pressable>

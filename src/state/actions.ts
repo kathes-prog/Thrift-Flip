@@ -106,6 +106,19 @@ export interface CutPieceAction {
 }
 
 /**
+ * Join a cut half back with its other half, restoring the piece they were cut
+ * from (any time after the cut, not just as the last step). The restored piece
+ * takes this half's place, position, rotation and flip; the other half is
+ * removed wherever it is. Rejected (state unchanged) when this piece wasn't cut
+ * from anything, or its other half no longer exists (cut again, stitched) or
+ * was discarded.
+ */
+export interface UncutPieceAction {
+  type: 'UNCUT_PIECE';
+  pieceId: string;
+}
+
+/**
  * Sew two overlapping canvas pieces into ONE piece whose outline is both
  * outlines joined. Its areaCm2 is the sum of both (all that fabric is used).
  * Rejected (state unchanged) when the pieces don't overlap.
@@ -160,6 +173,7 @@ export type EditAction =
   | FlipPieceAction
   | RecolorPieceAction
   | CutPieceAction
+  | UncutPieceAction
   | StitchPiecesAction
   | ReturnPieceAction
   | ClearCanvasAction;

@@ -40,6 +40,7 @@ export function applyProjectAction(project: Project, action: ProjectAction): Pro
     case 'FLIP_PIECE':
     case 'RECOLOR_PIECE':
     case 'CUT_PIECE':
+    case 'UNCUT_PIECE':
     case 'STITCH_PIECES':
     case 'RETURN_PIECE':
     case 'CLEAR_CANVAS':

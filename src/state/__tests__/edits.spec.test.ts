@@ -342,3 +342,103 @@ describe('P2 · reset the canvas', () => {
     expect(state.present).toBe(p);
   });
 });
+
+describe('P2 · join a cut back (uncut)', () => {
+  // second-panel is a 20 × 20 cm square centred at (90, 35); cut down the middle.
+  const cut: CutPieceAction = {
+    type: 'CUT_PIECE',
+    pieceId: 'second-panel',
+    from: { x: 90, y: 0 },
+    to: { x: 90, y: 70 },
+    fragmentIds: ['frag-a', 'frag-b'],
+  };
+  const uncut = (pieceId: string) => ({ type: 'UNCUT_PIECE', pieceId }) as const;
+
+  test('long after the cut, joining back restores the original piece exactly', () => {
+    const p = preset('skirt-a');
+    const later = applyAll(
+      p,
+      cut,
+      { type: 'ROTATE_PIECE', pieceId: 'jeans-pocket-l', rotationDeg: 90 },
+      { type: 'RECOLOR_PIECE', pieceId: 'jeans-pocket-l', color: '#6D8FBF' },
+    );
+    const next = applyAll(later, uncut('frag-a'));
+    expect(piece(next, 'frag-a')).toBeUndefined();
+    expect(piece(next, 'frag-b')).toBeUndefined();
+    expect(piece(next, 'second-panel')).toEqual(piece(p, 'second-panel'));
+    // Same place in the drawing order, and the later edits are kept.
+    expect(next.pieces.map((x) => x.id)).toEqual(p.pieces.map((x) => x.id));
+    expect(piece(next, 'jeans-pocket-l')?.color).toBe('#6D8FBF');
+  });
+
+  test('the original comes back where the chosen half is now', () => {
+    const next = applyAll(
+      preset('skirt-a'),
+      cut,
+      { type: 'MOVE_PIECE', pieceId: 'frag-b', position: { x: 40, y: 50 } },
+      { type: 'ROTATE_PIECE', pieceId: 'frag-b', rotationDeg: 90 },
+      uncut('frag-b'),
+    );
+    const restored = piece(next, 'second-panel')!;
+    expect(restored).toMatchObject({ position: { x: 40, y: 50 }, rotationDeg: 90, areaCm2: 400 });
+    expect(polygonArea(restored.polygon)).toBeCloseTo(400);
+    expect(piece(next, 'frag-a')).toBeUndefined();
+  });
+
+  test('the other half is pulled back from the tray', () => {
+    const next = applyAll(
+      preset('skirt-a'),
+      cut,
+      { type: 'RETURN_PIECE', pieceId: 'frag-b' },
+      uncut('frag-a'),
+    );
+    expect(piece(next, 'second-panel')?.status).toBe('canvas');
+    expect(piece(next, 'frag-b')).toBeUndefined();
+  });
+
+  test('a half cut again is joined back one cut at a time', () => {
+    // frag-a is the left half: x 80–90, y 25–45. Cut it across the middle.
+    const twice = applyAll(preset('skirt-a'), cut, {
+      type: 'CUT_PIECE',
+      pieceId: 'frag-a',
+      from: { x: 75, y: 35 },
+      to: { x: 95, y: 35 },
+      fragmentIds: ['frag-aa', 'frag-ab'],
+    });
+    // frag-a no longer exists, so frag-b can't be joined back yet.
+    expect(applyAll(twice, uncut('frag-b'))).toBe(twice);
+    const once = applyAll(twice, uncut('frag-aa'));
+    expect(piece(once, 'frag-a')?.areaCm2).toBeCloseTo(200);
+    const original = applyAll(once, uncut('frag-a'));
+    expect(piece(original, 'second-panel')).toEqual(piece(preset('skirt-a'), 'second-panel'));
+  });
+
+  test('rejected when the other half was stitched, thrown away, or the piece was never cut', () => {
+    const p = applyAll(preset('skirt-a'), cut);
+    const stitched = applyAll(
+      p,
+      { type: 'MOVE_PIECE', pieceId: 'jeans-pocket-l', position: { x: 98, y: 35 } },
+      { type: 'STITCH_PIECES', pieceIds: ['frag-b', 'jeans-pocket-l'], mergedId: 'joined' },
+    );
+    expect(piece(stitched, 'joined')?.cutFrom).toBeUndefined();
+    expect(applyAll(stitched, uncut('frag-a'))).toBe(stitched);
+
+    const thrownAway = {
+      ...p,
+      pieces: p.pieces.map((x) => (x.id === 'frag-b' ? { ...x, status: 'discarded' as const } : x)),
+    };
+    expect(applyAll(thrownAway, uncut('frag-a'))).toBe(thrownAway);
+
+    const fresh = preset('skirt-a');
+    expect(applyAll(fresh, uncut('second-panel'))).toBe(fresh);
+    expect(applyAll(fresh, uncut('nope'))).toBe(fresh);
+  });
+
+  test('joining back is one undo step', () => {
+    const cutState = applyAll(preset('skirt-a'), cut);
+    let state = initHistory(cutState);
+    state = rootReducer(state, uncut('frag-a'));
+    state = rootReducer(state, { type: 'UNDO' });
+    expect(state.present).toBe(cutState);
+  });
+});
