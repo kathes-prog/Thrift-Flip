@@ -106,6 +106,19 @@ export interface CutPieceAction {
 }
 
 /**
+ * Join a cut half back with its other half, restoring the piece they were cut
+ * from (any time after the cut, not just as the last step). The restored piece
+ * takes this half's place, position, rotation and flip; the other half is
+ * removed wherever it is. Rejected (state unchanged) when this piece wasn't cut
+ * from anything, or its other half no longer exists (cut again, stitched) or
+ * was discarded.
+ */
+export interface UncutPieceAction {
+  type: 'UNCUT_PIECE';
+  pieceId: string;
+}
+
+/**
  * Sew two overlapping canvas pieces into ONE piece whose outline is both
  * outlines joined. Its areaCm2 is the sum of both (all that fabric is used).
  * Rejected (state unchanged) when the pieces don't overlap.
@@ -124,6 +137,14 @@ export interface StitchPiecesAction {
 export interface ReturnPieceAction {
   type: 'RETURN_PIECE';
   pieceId: string;
+}
+
+/**
+ * Canvas -> tray for EVERY piece on the canvas: the Studio's Reset button.
+ * One undo step. Rejected (state unchanged) when the canvas is already empty.
+ */
+export interface ClearCanvasAction {
+  type: 'CLEAR_CANVAS';
 }
 
 // ---- history and loading: reducer.ts (shared)
@@ -152,8 +173,10 @@ export type EditAction =
   | FlipPieceAction
   | RecolorPieceAction
   | CutPieceAction
+  | UncutPieceAction
   | StitchPiecesAction
-  | ReturnPieceAction;
+  | ReturnPieceAction
+  | ClearCanvasAction;
 
 /** Actions that change the project and are recorded in undo history. */
 export type ProjectAction = SourceAction | InventoryAction | EditAction;

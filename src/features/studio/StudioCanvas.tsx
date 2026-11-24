@@ -4,7 +4,8 @@
  * The design canvas: a gridded sheet that fills the space it is given, with
  * the pattern guide (optional) and the fabric pieces drawn in design units
  * (cm). The design area is fitted and centred, so the grid simply continues
- * to the edges of the frame.
+ * to the edges of the frame. When the frame grows (the Studio's drawer is
+ * tucked away), pieces keep their size and the extra room appears below.
  *
  * Touch:
  * - Tap reports the piece under the finger (or null) through onTap.
@@ -27,7 +28,16 @@ import {
   usePanGesture,
   useTapGesture,
 } from 'react-native-gesture-handler';
-import Svg, { Circle, Line, Polygon as SvgPolygon, Rect, Text as SvgText } from 'react-native-svg';
+import Svg, {
+  Circle,
+  ClipPath,
+  Defs,
+  G,
+  Line,
+  Polygon as SvgPolygon,
+  Rect,
+  Text as SvgText,
+} from 'react-native-svg';
 
 import { AppText } from '@/components/AppText';
 import { FREESTYLE_CANVAS, getPattern } from '@/fixtures/patterns';
@@ -48,6 +58,10 @@ const GRID_CM = 5;
 const FIT_MARGIN = 0.04;
 /** While rotating, angles this close to a multiple of 45° snap onto it. */
 const SNAP_DEG = 4;
+/** Fabric opacity while a pattern guide is showing, so the guide shows through. */
+const PIECE_OPACITY_OVER_GUIDE = 0.78;
+/** Strength of the light guide outline and labels drawn over fabric. */
+const GUIDE_ON_FABRIC_OPACITY = 0.75;
 
 export type CanvasTool = 'move' | 'rotate' | 'cut' | 'stitch';
 
@@ -139,21 +153,29 @@ export function StudioCanvas({
   const pattern = mode?.kind === 'pattern' ? getPattern(mode.patternId) : undefined;
   const canvas = pattern?.canvas ?? FREESTYLE_CANVAS;
 
-  const [size, setSize] = useState<Size | null>(null);
+  // `fit` is the smallest frame seen at this width. Fitting to it (not to the
+  // current frame) means pieces keep their size when the Studio's drawer is
+  // tucked away and the frame grows: the extra room just shows more grid below.
+  const [frame, setFrame] = useState<{ size: Size; fit: Size } | null>(null);
+  const size = frame?.size ?? null;
   const onLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
-    setSize({ width, height });
+    setFrame((prev) => {
+      const keep = prev && prev.fit.width === width && prev.fit.height <= height;
+      return { size: { width, height }, fit: keep ? prev.fit : { width, height } };
+    });
   };
 
-  // Fit the design area inside the frame, centred, with a small margin.
+  // Fit the design area inside that frame, centred, with a small margin.
   let viewport: Viewport = { scale: 1, offsetX: 0, offsetY: 0 };
-  if (size) {
+  if (frame) {
+    const { fit } = frame;
     const scale =
-      Math.min(size.width / canvas.widthCm, size.height / canvas.heightCm) * (1 - FIT_MARGIN);
+      Math.min(fit.width / canvas.widthCm, fit.height / canvas.heightCm) * (1 - FIT_MARGIN);
     viewport = {
       scale,
-      offsetX: (size.width - canvas.widthCm * scale) / 2,
-      offsetY: (size.height - canvas.heightCm * scale) / 2,
+      offsetX: (frame.size.width - canvas.widthCm * scale) / 2,
+      offsetY: (fit.height - canvas.heightCm * scale) / 2,
     };
   }
 
@@ -303,6 +325,7 @@ export function StudioCanvas({
     return piece;
   };
 
+  const guideShown = showGuide && !!pattern;
   const placed = pieces.filter((piece) => piece.status === 'canvas').map(shown);
   const selected = placed.find((piece) => piece.id === selectedId);
 
@@ -324,6 +347,25 @@ export function StudioCanvas({
   const gridYs = view
     ? range(Math.ceil(view.y / GRID_CM), Math.floor((view.y + view.height) / GRID_CM))
     : [];
+
+  const guideLabels = (fill: string) =>
+    pattern?.guideRegions.map((region) => {
+      const c = centroid(region.polygon);
+      return (
+        <SvgText
+          key={`${region.id}-label-${fill}`}
+          x={c.x}
+          y={c.y}
+          fontSize={12 * px}
+          fontWeight="700"
+          letterSpacing={1.5 * px}
+          fill={fill}
+          textAnchor="middle"
+        >
+          {region.label.toUpperCase()}
+        </SvgText>
+      );
+    });
 
   return (
     <View style={styles.frame}>
@@ -378,30 +420,12 @@ export function StudioCanvas({
                     />
                   ))
                 : null}
-              {showGuide
-                ? pattern?.guideRegions.map((region) => {
-                    const c = centroid(region.polygon);
-                    return (
-                      <SvgText
-                        key={`${region.id}-label`}
-                        x={c.x}
-                        y={c.y}
-                        fontSize={12 * px}
-                        fontWeight="700"
-                        letterSpacing={1.5 * px}
-                        fill={studio.muted}
-                        textAnchor="middle"
-                      >
-                        {region.label.toUpperCase()}
-                      </SvgText>
-                    );
-                  })
-                : null}
               {placed.map((piece) => (
                 <SvgPolygon
                   key={piece.id}
                   points={points(pieceToDesign(piece))}
                   fill={piece.color}
+                  fillOpacity={guideShown ? PIECE_OPACITY_OVER_GUIDE : 1}
                   stroke={studio.ink}
                   strokeOpacity={0.3}
                   strokeWidth={px}
@@ -413,8 +437,37 @@ export function StudioCanvas({
                   key={`${piece.id}-twill`}
                   points={points(pieceToDesign(piece))}
                   fill="url(#denim)"
+                  fillOpacity={guideShown ? PIECE_OPACITY_OVER_GUIDE : 1}
                 />
               ))}
+              {/* Guide labels sit above the fabric so they're never hidden. */}
+              {guideShown ? guideLabels(studio.muted) : null}
+              {/* Where fabric covers the guide, redraw its outline and labels in a
+                  light colour, clipped to the pieces, so the pattern still reads. */}
+              {guideShown && placed.length > 0 ? (
+                <>
+                  <Defs>
+                    <ClipPath id="on-fabric">
+                      {placed.map((piece) => (
+                        <SvgPolygon key={piece.id} points={points(pieceToDesign(piece))} />
+                      ))}
+                    </ClipPath>
+                  </Defs>
+                  <G clipPath="url(#on-fabric)" opacity={GUIDE_ON_FABRIC_OPACITY}>
+                    {pattern?.guideRegions.map((region) => (
+                      <SvgPolygon
+                        key={`${region.id}-on-fabric`}
+                        points={points(region.polygon)}
+                        fill="none"
+                        stroke={studio.card}
+                        strokeWidth={1.5 * px}
+                        strokeDasharray={`${4 * px} ${3 * px}`}
+                      />
+                    ))}
+                    {guideLabels(studio.card)}
+                  </G>
+                </>
+              ) : null}
               {selected ? (
                 <SvgPolygon
                   points={points(pieceToDesign(selected))}

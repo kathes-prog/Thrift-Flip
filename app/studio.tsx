@@ -1,12 +1,14 @@
 /**
  * Owner: P2. The Design Studio, laid out like the hi-fi Figma frame:
  * header (back · title · Done), canvas bar (mode · 3D · Show guide), the
- * canvas with Store / Discard, the tool row, and the "Fabric pieces" sheet.
+ * canvas with Store / Discard, the tool row, and the "Fabric pieces" sheet
+ * (a drawer: drag it down to give the canvas more room, back up to see the cards).
  *
  * - Tapping a tray card sends PLACE_PIECE; P1's inventory handler decides
  *   whether it may go on the canvas (e.g. a third jeans pocket is rejected).
  * - Discard sends the selection back to the tray (RETURN_PIECE); Store sends
- *   P1's STORE_PIECE.
+ *   P1's STORE_PIECE. Reset sends every canvas piece back (CLEAR_CANVAS).
+ * - Uncut joins a cut half back with its other half, any time after the cut.
  * - Rotate, Cut and Stitch are finger gestures on the canvas (StudioCanvas).
  * - The 3D view is P3's <SkirtPreview />. The sheet's totals come from P1's
  *   selectTracker() (with a temporary fallback while it returns zeros).
@@ -23,6 +25,7 @@ import { SkirtPreview } from '@/features/preview3d/SkirtPreview';
 import { newFragmentIds, newMergedId } from '@/features/studio/ids';
 import { PIECE_COLORS } from '@/features/studio/palette';
 import { PieceCard } from '@/features/studio/PieceCard';
+import { PieceDrawer } from '@/features/studio/PieceDrawer';
 import { StudioCanvas, type CanvasTool } from '@/features/studio/StudioCanvas';
 import { studio } from '@/features/studio/studioStyle';
 import { fallbackTotals } from '@/features/studio/testPieces';
@@ -99,6 +102,28 @@ export default function Studio() {
     dispatch(action);
     setNotice(null);
     return true;
+  };
+
+  /** Every piece on the canvas goes back to the tray, as one undo step. */
+  const resetCanvas = () => {
+    if (attempt({ type: 'CLEAR_CANVAS' }, 'The canvas is already empty.')) {
+      setSelectedId(null);
+      setOpenTool(null);
+    }
+  };
+
+  /** Uncut: the selected half and its other half become one piece again, any time after the cut. */
+  const joinBack = () => {
+    if (!selected) return;
+    const done = attempt(
+      { type: 'UNCUT_PIECE', pieceId: selected.id },
+      "Can't uncut: its other half was cut again, stitched or thrown away.",
+    );
+    if (done) {
+      setOpenTool(null);
+      // Keep the joined piece selected (it gets back the original piece's id).
+      if (selected.cutFrom) setSelectedId(selected.cutFrom.parent.id);
+    }
   };
 
   const toggleTool = (next: Tool) => {
@@ -222,11 +247,23 @@ export default function Studio() {
       onPress: () => toggleTool('cut'),
     },
     {
+      label: 'Uncut',
+      icon: 'uncut',
+      disabled: !selected?.cutFrom,
+      onPress: joinBack,
+    },
+    {
       label: 'Stitch',
       icon: 'stitch',
       disabled: onCanvas.length < 2,
       active: tool === 'stitch',
       onPress: () => toggleTool('stitch'),
+    },
+    {
+      label: 'Reset',
+      icon: 'reset',
+      disabled: onCanvas.length === 0,
+      onPress: resetCanvas,
     },
   ];
 
@@ -432,31 +469,35 @@ export default function Studio() {
         ) : null}
       </View>
 
-      {/* Fabric pieces sheet */}
-      <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.sm }]}>
-        <View style={styles.sheetHeader}>
-          <View>
-            <AppText variant="heading" color={studio.ink}>
-              Fabric pieces
-            </AppText>
-            <AppText variant="caption" color={studio.muted}>
-              {formatArea(tracker.availableCm2)} available
-            </AppText>
-          </View>
-          <View style={styles.usage}>
-            <View style={styles.track}>
-              <View
-                style={[
-                  styles.fill,
-                  { width: `${Math.min(100, Math.max(0, tracker.percentUsed))}%` },
-                ]}
-              />
+      {/* Fabric pieces sheet: drag it down to give the canvas more room */}
+      <PieceDrawer
+        bottomInset={insets.bottom + spacing.sm}
+        header={
+          <View style={styles.sheetHeader}>
+            <View>
+              <AppText variant="heading" color={studio.ink}>
+                Fabric pieces
+              </AppText>
+              <AppText variant="caption" color={studio.muted}>
+                {formatArea(tracker.availableCm2)} available
+              </AppText>
             </View>
-            <AppText variant="caption" color={studio.muted}>
-              {Math.round(tracker.percentUsed)}% used
-            </AppText>
+            <View style={styles.usage}>
+              <View style={styles.track}>
+                <View
+                  style={[
+                    styles.fill,
+                    { width: `${Math.min(100, Math.max(0, tracker.percentUsed))}%` },
+                  ]}
+                />
+              </View>
+              <AppText variant="caption" color={studio.muted}>
+                {Math.round(tracker.percentUsed)}% used
+              </AppText>
+            </View>
           </View>
-        </View>
+        }
+      >
         {tray.length === 0 ? (
           <AppText variant="caption" color={studio.muted} style={styles.trayEmpty}>
             Every piece is on the canvas.
@@ -472,7 +513,7 @@ export default function Studio() {
             ))}
           </ScrollView>
         )}
-      </View>
+      </PieceDrawer>
     </View>
   );
 }
@@ -632,21 +673,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   message: { textAlign: 'center' },
-  sheet: {
-    backgroundColor: studio.sheet,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingTop: spacing.md,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: -2 },
-  },
   sheetHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.xs,
   },
   usage: { alignItems: 'flex-end', gap: spacing.xs, paddingTop: spacing.xs },
   track: {
