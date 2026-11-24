@@ -7,7 +7,7 @@
  * - Tapping a tray card sends PLACE_PIECE; P1's inventory handler decides
  *   whether it may go on the canvas (e.g. a third jeans pocket is rejected).
  * - Discard sends the selection back to the tray (RETURN_PIECE); Store sends
- *   P1's STORE_PIECE.
+ *   P1's STORE_PIECE. Reset sends every canvas piece back (CLEAR_CANVAS).
  * - Rotate, Cut and Stitch are finger gestures on the canvas (StudioCanvas).
  * - The 3D view is P3's <SkirtPreview />. The sheet's totals come from P1's
  *   selectTracker() (with a temporary fallback while it returns zeros).
@@ -99,6 +99,14 @@ export default function Studio() {
     dispatch(action);
     setNotice(null);
     return true;
+  };
+
+  /** Every piece on the canvas goes back to the tray, as one undo step. */
+  const resetCanvas = () => {
+    if (attempt({ type: 'CLEAR_CANVAS' }, 'The canvas is already empty.')) {
+      setSelectedId(null);
+      setOpenTool(null);
+    }
   };
 
   const toggleTool = (next: Tool) => {
@@ -227,6 +235,12 @@ export default function Studio() {
       disabled: onCanvas.length < 2,
       active: tool === 'stitch',
       onPress: () => toggleTool('stitch'),
+    },
+    {
+      label: 'Reset',
+      icon: 'reset',
+      disabled: onCanvas.length === 0,
+      onPress: resetCanvas,
     },
   ];
 

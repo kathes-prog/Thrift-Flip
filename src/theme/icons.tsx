@@ -27,6 +27,7 @@ export const iconNames = [
   'store',
   'restore',
   'discard',
+  'reset',
   'add',
   'cube',
   'save',
@@ -116,6 +117,8 @@ function glyph(name: IconName, s: StrokeProps) {
       return <Path d="M3 8h18v12H3zM12 17v-6M9 14l3-3 3 3" {...s} />;
     case 'discard':
       return <Path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" {...s} />;
+    case 'reset':
+      return <Path d="M4 4v5h5M4.5 9A8 8 0 1 1 4 13" {...s} />;
     case 'add':
       return <Path d="M12 5v14M5 12h14" {...s} />;
     case 'cube':

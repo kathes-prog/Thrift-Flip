@@ -314,3 +314,31 @@ describe('P2 · discard back to the tray', () => {
     expect(applyAll(p, { type: 'RETURN_PIECE', pieceId: 'nope' })).toBe(p);
   });
 });
+
+describe('P2 · reset the canvas', () => {
+  test('every canvas piece goes back to the tray; other pieces are left alone', () => {
+    const p = preset('skirt-a');
+    expect(p.pieces.some((x) => x.status === 'canvas')).toBe(true);
+    const next = applyAll(p, { type: 'CLEAR_CANVAS' });
+    expect(next.pieces.some((x) => x.status === 'canvas')).toBe(false);
+    p.pieces.forEach((before, i) => {
+      const after = next.pieces[i]!;
+      expect(after.id).toBe(before.id);
+      expect(after.status).toBe(before.status === 'canvas' ? 'tray' : before.status);
+      expect(after.areaCm2).toBe(before.areaCm2);
+    });
+  });
+
+  test('an empty canvas is left unchanged', () => {
+    const p = applyAll(preset('skirt-a'), { type: 'CLEAR_CANVAS' });
+    expect(applyAll(p, { type: 'CLEAR_CANVAS' })).toBe(p);
+  });
+
+  test('one undo puts every piece back on the canvas', () => {
+    const p = preset('skirt-a');
+    let state = initHistory(p);
+    state = rootReducer(state, { type: 'CLEAR_CANVAS' });
+    state = rootReducer(state, { type: 'UNDO' });
+    expect(state.present).toBe(p);
+  });
+});

@@ -17,6 +17,7 @@
  * - STITCH_PIECES joins two overlapping canvas pieces into one piece
  *   (outline = union, area = sum). Rejected when they don't overlap.
  * - RETURN_PIECE sends a canvas piece back to the tray (Discard in the Studio).
+ * - CLEAR_CANVAS sends every canvas piece back to the tray (Reset in the Studio).
  *
  * Return the SAME project object when nothing changes.
  */
@@ -57,6 +58,14 @@ export function handleEditAction(project: Project, action: EditAction): Project 
       return updatePiece(project, action.pieceId, (piece) =>
         piece.status === 'canvas' ? { ...piece, status: 'tray' } : piece,
       );
+    case 'CLEAR_CANVAS':
+      if (!project.pieces.some((piece) => piece.status === 'canvas')) return project;
+      return {
+        ...project,
+        pieces: project.pieces.map((piece) =>
+          piece.status === 'canvas' ? { ...piece, status: 'tray' } : piece,
+        ),
+      };
   }
 }
 

@@ -42,6 +42,7 @@ export function applyProjectAction(project: Project, action: ProjectAction): Pro
     case 'CUT_PIECE':
     case 'STITCH_PIECES':
     case 'RETURN_PIECE':
+    case 'CLEAR_CANVAS':
       return handleEditAction(project, action);
   }
 }

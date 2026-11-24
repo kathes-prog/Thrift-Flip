@@ -126,6 +126,14 @@ export interface ReturnPieceAction {
   pieceId: string;
 }
 
+/**
+ * Canvas -> tray for EVERY piece on the canvas: the Studio's Reset button.
+ * One undo step. Rejected (state unchanged) when the canvas is already empty.
+ */
+export interface ClearCanvasAction {
+  type: 'CLEAR_CANVAS';
+}
+
 // ---- history and loading: reducer.ts (shared)
 
 export interface UndoAction {
@@ -153,7 +161,8 @@ export type EditAction =
   | RecolorPieceAction
   | CutPieceAction
   | StitchPiecesAction
-  | ReturnPieceAction;
+  | ReturnPieceAction
+  | ClearCanvasAction;
 
 /** Actions that change the project and are recorded in undo history. */
 export type ProjectAction = SourceAction | InventoryAction | EditAction;
