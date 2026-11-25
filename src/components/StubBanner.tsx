@@ -1,8 +1,9 @@
 import { StyleSheet, View } from 'react-native';
 
-import { colors, radii, spacing } from '@/theme';
+import { colors, lines, spacing } from '@/theme';
 
 import { AppText } from './AppText';
+import { TapeLabel } from './zine/Decor';
 
 export type Owner = 'P1' | 'P2' | 'P3' | 'Shared';
 
@@ -17,11 +18,9 @@ const ownerNames: Record<Owner, string> = {
 export function StubBanner({ owner, note }: { owner: Owner; note: string }) {
   return (
     <View style={styles.banner}>
-      <AppText variant="label" color={colors.warning}>
-        STUB · {ownerNames[owner]}
-      </AppText>
-      <AppText variant="caption" color={colors.inkMuted}>
-        {note}
+      <TapeLabel>{`STUB · ${owner}`}</TapeLabel>
+      <AppText variant="caption" color={colors.inkMuted} style={styles.note}>
+        {`${ownerNames[owner]}: ${note}`}
       </AppText>
     </View>
   );
@@ -29,11 +28,13 @@ export function StubBanner({ owner, note }: { owner: Owner; note: string }) {
 
 const styles = StyleSheet.create({
   banner: {
-    borderWidth: 1,
+    borderWidth: lines.thin,
     borderStyle: 'dashed',
-    borderColor: colors.warning,
-    borderRadius: radii.md,
-    padding: spacing.sm,
-    gap: 2,
+    borderColor: colors.ink,
+    padding: spacing.xs + 2,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
   },
+  note: { flex: 1, fontSize: 11, lineHeight: 15 },
 });

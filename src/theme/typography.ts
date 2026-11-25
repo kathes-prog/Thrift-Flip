@@ -1,47 +1,53 @@
 /**
- * Shared: fonts and text styles.
- *
- * TODO(skeleton): confirm which family and weight each text style uses in the
- * Figma Make prototype. Current guess: Manrope for headings, DM Sans for body.
+ * Shared: fonts and text styles for the Zine look.
+ * Bowlby One for chunky cut-out headlines, Courier Prime (typewriter) for
+ * everything you read and tap. Custom fonts carry their own weight, so no
+ * style sets fontWeight.
  */
-import { DMSans_400Regular, DMSans_500Medium, DMSans_700Bold } from '@expo-google-fonts/dm-sans';
-import {
-  Manrope_400Regular,
-  Manrope_600SemiBold,
-  Manrope_800ExtraBold,
-} from '@expo-google-fonts/manrope';
+import { BowlbyOne_400Regular } from '@expo-google-fonts/bowlby-one';
+import { CourierPrime_400Regular, CourierPrime_700Bold } from '@expo-google-fonts/courier-prime';
 import type { TextStyle } from 'react-native';
 
 /** Passed to useFonts() in app/_layout.tsx. Keys are the fontFamily names. */
 export const fontAssets = {
-  DMSans_400Regular,
-  DMSans_500Medium,
-  DMSans_700Bold,
-  Manrope_400Regular,
-  Manrope_600SemiBold,
-  Manrope_800ExtraBold,
+  BowlbyOne_400Regular,
+  CourierPrime_400Regular,
+  CourierPrime_700Bold,
 };
 
 export type FontFamily = keyof typeof fontAssets;
 
+export const fonts = {
+  display: 'BowlbyOne_400Regular',
+  type: 'CourierPrime_400Regular',
+  typeBold: 'CourierPrime_700Bold',
+} as const satisfies Record<string, FontFamily>;
+
 /** Every family + weight the app uses. Hello Styles renders each one. */
 export const fontList: { family: FontFamily; label: string }[] = [
-  { family: 'DMSans_400Regular', label: 'DM Sans 400' },
-  { family: 'DMSans_500Medium', label: 'DM Sans 500' },
-  { family: 'DMSans_700Bold', label: 'DM Sans 700' },
-  { family: 'Manrope_400Regular', label: 'Manrope 400' },
-  { family: 'Manrope_600SemiBold', label: 'Manrope 600' },
-  { family: 'Manrope_800ExtraBold', label: 'Manrope 800' },
+  { family: 'BowlbyOne_400Regular', label: 'Bowlby One' },
+  { family: 'CourierPrime_400Regular', label: 'Courier Prime 400' },
+  { family: 'CourierPrime_700Bold', label: 'Courier Prime 700' },
 ];
 
+// Bowlby One has very tall ascenders: iOS clips its glyphs unless the line
+// height is about 1.25× the font size.
 export const text = {
-  display: { fontFamily: 'Manrope_800ExtraBold', fontSize: 32, lineHeight: 38 },
-  title: { fontFamily: 'Manrope_800ExtraBold', fontSize: 24, lineHeight: 30 },
-  heading: { fontFamily: 'Manrope_600SemiBold', fontSize: 18, lineHeight: 24 },
-  body: { fontFamily: 'DMSans_400Regular', fontSize: 16, lineHeight: 22 },
-  bodyStrong: { fontFamily: 'DMSans_500Medium', fontSize: 16, lineHeight: 22 },
-  label: { fontFamily: 'DMSans_700Bold', fontSize: 14, lineHeight: 18 },
-  caption: { fontFamily: 'DMSans_400Regular', fontSize: 13, lineHeight: 18 },
+  display: { fontFamily: fonts.display, fontSize: 44, lineHeight: 56 },
+  title: { fontFamily: fonts.display, fontSize: 32, lineHeight: 41 },
+  heading: { fontFamily: fonts.display, fontSize: 18, lineHeight: 24 },
+  body: { fontFamily: fonts.type, fontSize: 16, lineHeight: 22 },
+  bodyStrong: { fontFamily: fonts.typeBold, fontSize: 16, lineHeight: 22 },
+  label: { fontFamily: fonts.typeBold, fontSize: 14, lineHeight: 18, letterSpacing: 0.4 },
+  caption: { fontFamily: fonts.type, fontSize: 13, lineHeight: 18 },
+  /** Small all-caps typewriter line above titles ("STEP 2/4"). */
+  kicker: {
+    fontFamily: fonts.typeBold,
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
 } satisfies Record<string, TextStyle>;
 
 export type TextVariant = keyof typeof text;

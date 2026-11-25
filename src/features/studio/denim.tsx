@@ -1,33 +1,26 @@
 /**
- * Owner: P2. A diagonal twill texture laid over a piece's colour so fabric
- * reads as denim, on the canvas and in the tray cards.
+ * Owner: P2. A photocopy halftone laid over a piece's colour so fabric reads
+ * as a printed cut-out in the Zine look, on the canvas and in the tray cards.
+ * (The export keeps its old name so callers don't change.)
  */
-import { Defs, Line, Pattern } from 'react-native-svg';
+import { Circle, Defs, Pattern } from 'react-native-svg';
 
 interface DenimDefsProps {
   id: string;
-  /** Distance between twill lines, in the Svg's own units. */
+  /** Distance between halftone dots, in the Svg's own units. */
   spacing: number;
 }
 
 export function DenimDefs({ id, spacing }: DenimDefsProps) {
   return (
     <Defs>
-      <Pattern
-        id={id}
-        patternUnits="userSpaceOnUse"
-        width={spacing}
-        height={spacing}
-        patternTransform="rotate(40)"
-      >
-        <Line
-          x1={0}
-          y1={0}
-          x2={0}
-          y2={spacing}
-          stroke="#FFFFFF"
-          strokeOpacity={0.22}
-          strokeWidth={spacing * 0.28}
+      <Pattern id={id} patternUnits="userSpaceOnUse" width={spacing} height={spacing}>
+        <Circle
+          cx={spacing / 2}
+          cy={spacing / 2}
+          r={spacing * 0.24}
+          fill="#000000"
+          fillOpacity={0.28}
         />
       </Pattern>
     </Defs>

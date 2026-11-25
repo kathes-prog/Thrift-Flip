@@ -27,8 +27,10 @@ export function SkirtPreview({ project }: { project: Project }) {
 }
 
 const styles = StyleSheet.create({
+  // Fills the space it's given (no fixed aspect ratio), so it never spills over
+  // the Studio's canvas bar.
   box: {
-    aspectRatio: 1,
+    flex: 1,
     width: '100%',
     borderRadius: radii.md,
     borderWidth: 1,

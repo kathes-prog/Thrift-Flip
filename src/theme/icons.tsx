@@ -43,7 +43,14 @@ interface IconProps {
 }
 
 export function Icon({ name, size = 24, color = colors.ink }: IconProps) {
-  const stroke = { stroke: color, strokeWidth: 2, fill: 'none' as const };
+  // Zine look: heavier strokes with square, cut-paper ends.
+  const stroke = {
+    stroke: color,
+    strokeWidth: 2.4,
+    fill: 'none' as const,
+    strokeLinecap: 'square' as const,
+    strokeLinejoin: 'miter' as const,
+  };
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" accessibilityLabel={`${name} icon`}>
       {glyph(name, stroke)}
@@ -51,7 +58,13 @@ export function Icon({ name, size = 24, color = colors.ink }: IconProps) {
   );
 }
 
-type StrokeProps = { stroke: string; strokeWidth: number; fill: 'none' };
+type StrokeProps = {
+  stroke: string;
+  strokeWidth: number;
+  fill: 'none';
+  strokeLinecap: 'square';
+  strokeLinejoin: 'miter';
+};
 
 function glyph(name: IconName, s: StrokeProps) {
   switch (name) {

@@ -1,11 +1,11 @@
 /**
- * Owner: P2. A Studio toolbar button: icon above a small label, no box,
- * as in the hi-fi Figma. Active tools get a soft highlight.
+ * Owner: P2. A Studio tool as a strip of label-maker tape: black with white
+ * embossed type. The open tool turns hot pink; unavailable tools fade to a grey outline.
  */
 import { Pressable, StyleSheet } from 'react-native';
 
 import { AppText } from '@/components/AppText';
-import { Icon, radii, type IconName } from '@/theme';
+import { Icon, type IconName } from '@/theme';
 
 import { studio } from './studioStyle';
 
@@ -19,7 +19,7 @@ interface ToolButtonProps {
 }
 
 export function ToolButton({ label, icon, onPress, disabled, active }: ToolButtonProps) {
-  const color = disabled ? studio.faint : active ? studio.sage : studio.ink;
+  const fg = active ? studio.ink : disabled ? studio.faint : studio.toolText;
   return (
     <Pressable
       accessibilityRole="button"
@@ -30,18 +30,19 @@ export function ToolButton({ label, icon, onPress, disabled, active }: ToolButto
       style={({ pressed }) => [
         styles.base,
         active && styles.active,
+        disabled && styles.disabled,
         pressed && !disabled && styles.pressed,
       ]}
     >
-      <Icon name={icon} size={24} color={color} />
+      <Icon name={icon} size={18} color={fg} />
       <AppText
-        variant="caption"
-        color={color}
+        variant="label"
+        color={fg}
         style={styles.label}
         numberOfLines={1}
         adjustsFontSizeToFit
       >
-        {label}
+        {label.toUpperCase()}
       </AppText>
     </Pressable>
   );
@@ -49,13 +50,29 @@ export function ToolButton({ label, icon, onPress, disabled, active }: ToolButto
 
 const styles = StyleSheet.create({
   base: {
-    flex: 1,
+    flexBasis: '18%',
+    flexGrow: 1,
+    minHeight: 46,
     alignItems: 'center',
-    gap: 4,
-    paddingVertical: 6,
-    borderRadius: radii.md,
+    justifyContent: 'center',
+    gap: 2,
+    paddingHorizontal: 2,
+    backgroundColor: studio.tool,
+    // the raised edge of embossed tape
+    borderTopWidth: 2,
+    borderTopColor: '#333333',
+    borderBottomWidth: 2,
+    borderBottomColor: '#000000',
   },
-  active: { backgroundColor: '#E6ECE6' },
-  pressed: { backgroundColor: '#ECEAE4' },
-  label: { fontSize: 12, lineHeight: 15 },
+  active: { backgroundColor: studio.toolActive, borderTopColor: studio.toolActive },
+  // Unavailable: a faded outline on paper, so an idle toolbar doesn't read as broken.
+  disabled: {
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: studio.faint,
+    borderTopColor: studio.faint,
+    borderBottomColor: studio.faint,
+  },
+  pressed: { backgroundColor: '#3A3A3A' },
+  label: { fontSize: 10, lineHeight: 12, letterSpacing: 0.8 },
 });
