@@ -56,7 +56,7 @@ export function PieceCard({ piece, onPress }: { piece: FabricPiece; onPress: () 
           <Icon name="add" size={14} color={studio.ink} />
         </View>
       </View>
-      <AppText variant="label" color={studio.ink} numberOfLines={1} style={styles.name}>
+      <AppText variant="label" color={studio.ink} numberOfLines={2} style={styles.name}>
         {piece.displayName}
       </AppText>
       <AppText variant="caption" color={studio.muted} style={styles.size}>
@@ -67,8 +67,17 @@ export function PieceCard({ piece, onPress }: { piece: FabricPiece; onPress: () 
 }
 
 const styles = StyleSheet.create({
-  card: { width: 120, gap: 2, padding: spacing.xs, borderRadius: 12 },
-  pressed: { backgroundColor: '#EFEDE7' },
+  // A cut-out card of paper pinned in the pile.
+  card: {
+    width: 132,
+    gap: 2,
+    padding: spacing.xs + 2,
+    backgroundColor: studio.card,
+    borderWidth: 2,
+    borderColor: studio.ink,
+    transform: [{ rotate: '-1.5deg' }],
+  },
+  pressed: { backgroundColor: studio.plus },
   thumb: {
     height: THUMB_H + 8,
     alignItems: 'center',
@@ -81,15 +90,13 @@ const styles = StyleSheet.create({
     right: 6,
     width: 26,
     height: 26,
-    borderRadius: 13,
+    borderWidth: 2,
+    borderColor: studio.ink,
     backgroundColor: studio.plus,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 1 },
   },
-  name: { fontSize: 13 },
+  // Two lines: the typewriter face is wide, so names like "Front leg panel (left)" wrap.
+  name: { fontSize: 12, lineHeight: 15, minHeight: 30 },
   size: { fontSize: 12, lineHeight: 15 },
 });

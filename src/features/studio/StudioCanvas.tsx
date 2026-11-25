@@ -45,7 +45,7 @@ import { pieceAt } from '@/geometry/hitTest';
 import { pieceToDesign, screenToDesign, type Viewport } from '@/geometry/transform';
 import type { DesignMode, FabricPiece } from '@/model/types';
 import type { Point, Polygon } from '@/model/units';
-import { Icon, radii, spacing } from '@/theme';
+import { fonts, Icon, lines, spacing } from '@/theme';
 
 import { DenimDefs } from './denim';
 import { studio } from './studioStyle';
@@ -59,9 +59,13 @@ const FIT_MARGIN = 0.04;
 /** While rotating, angles this close to a multiple of 45° snap onto it. */
 const SNAP_DEG = 4;
 /** Fabric opacity while a pattern guide is showing, so the guide shows through. */
-const PIECE_OPACITY_OVER_GUIDE = 0.78;
+// Solid cut-outs: the guide stays readable because it's redrawn in yellow over
+// the fabric, so pieces no longer need to be see-through.
+const PIECE_OPACITY_OVER_GUIDE = 1;
+/** Offset of each piece's hard shadow, in screen points. */
+const SHADOW_PX = 3;
 /** Strength of the light guide outline and labels drawn over fabric. */
-const GUIDE_ON_FABRIC_OPACITY = 0.75;
+const GUIDE_ON_FABRIC_OPACITY = 1;
 
 export type CanvasTool = 'move' | 'rotate' | 'cut' | 'stitch';
 
@@ -155,7 +159,8 @@ export function StudioCanvas({
 
   // `fit` is the smallest frame seen at this width. Fitting to it (not to the
   // current frame) means pieces keep their size when the Studio's drawer is
-  // tucked away and the frame grows: the extra room just shows more grid below.
+  // tucked away and the frame grows: the design stays the same size and is
+  // re-centred in the taller frame.
   const [frame, setFrame] = useState<{ size: Size; fit: Size } | null>(null);
   const size = frame?.size ?? null;
   const onLayout = (e: LayoutChangeEvent) => {
@@ -175,7 +180,7 @@ export function StudioCanvas({
     viewport = {
       scale,
       offsetX: (frame.size.width - canvas.widthCm * scale) / 2,
-      offsetY: (fit.height - canvas.heightCm * scale) / 2,
+      offsetY: (frame.size.height - canvas.heightCm * scale) / 2,
     };
   }
 
@@ -357,7 +362,7 @@ export function StudioCanvas({
           x={c.x}
           y={c.y}
           fontSize={12 * px}
-          fontWeight="700"
+          fontFamily={fonts.typeBold}
           letterSpacing={1.5 * px}
           fill={fill}
           textAnchor="middle"
@@ -420,6 +425,15 @@ export function StudioCanvas({
                     />
                   ))
                 : null}
+              {/* Hard offset shadow under every piece, like a cut-out pasted on paper. */}
+              {placed.map((piece) => (
+                <SvgPolygon
+                  key={`${piece.id}-shadow`}
+                  points={points(pieceToDesign(piece))}
+                  fill={studio.ink}
+                  transform={`translate(${SHADOW_PX * px} ${SHADOW_PX * px})`}
+                />
+              ))}
               {placed.map((piece) => (
                 <SvgPolygon
                   key={piece.id}
@@ -427,9 +441,8 @@ export function StudioCanvas({
                   fill={piece.color}
                   fillOpacity={guideShown ? PIECE_OPACITY_OVER_GUIDE : 1}
                   stroke={studio.ink}
-                  strokeOpacity={0.3}
-                  strokeWidth={px}
-                  strokeLinejoin="round"
+                  strokeWidth={1.5 * px}
+                  strokeLinejoin="miter"
                 />
               ))}
               {placed.map((piece) => (
@@ -459,12 +472,12 @@ export function StudioCanvas({
                         key={`${region.id}-on-fabric`}
                         points={points(region.polygon)}
                         fill="none"
-                        stroke={studio.card}
-                        strokeWidth={1.5 * px}
+                        stroke={studio.plus}
+                        strokeWidth={2 * px}
                         strokeDasharray={`${4 * px} ${3 * px}`}
                       />
                     ))}
-                    {guideLabels(studio.card)}
+                    {guideLabels(studio.plus)}
                   </G>
                 </>
               ) : null}
@@ -500,14 +513,11 @@ export function StudioCanvas({
               ) : null}
             </Svg>
           ) : null}
-          {placed.length === 0 ? (
+          {placed.length === 0 && !guideShown ? (
             <View style={styles.empty} pointerEvents="none">
               <Icon name="layers" size={40} color={studio.muted} />
               <AppText variant="heading" color={studio.muted}>
-                Build your design
-              </AppText>
-              <AppText variant="caption" color={studio.muted}>
-                Tap a fabric piece below to add it
+                BUILD YOUR DESIGN
               </AppText>
             </View>
           ) : null}
@@ -532,9 +542,8 @@ export function StudioCanvas({
 const styles = StyleSheet.create({
   frame: {
     flex: 1,
-    borderRadius: radii.lg,
     overflow: 'hidden',
-    borderWidth: 1,
+    borderWidth: lines.bold,
     borderColor: studio.canvasBorder,
     backgroundColor: studio.canvas,
   },
@@ -552,7 +561,6 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
-    borderRadius: radii.pill,
     backgroundColor: studio.ink,
   },
 });

@@ -131,17 +131,15 @@ export function PieceDrawer({
 }
 
 const styles = StyleSheet.create({
+  // Zine look: a cut-here dashed line across the top instead of a rounded sheet.
   sheet: {
     backgroundColor: studio.sheet,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: -2 },
+    borderTopWidth: 2,
+    borderStyle: 'dashed',
+    borderTopColor: studio.ink,
   },
   handleRow: { alignItems: 'center', paddingTop: spacing.sm, paddingBottom: spacing.sm },
-  handle: { width: 40, height: 5, borderRadius: 3, backgroundColor: studio.track },
+  handle: { width: 44, height: 6, backgroundColor: studio.ink },
   body: { overflow: 'hidden' },
   bodyContent: { position: 'absolute', top: 0, left: 0, right: 0 },
 });

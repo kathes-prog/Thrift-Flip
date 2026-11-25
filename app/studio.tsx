@@ -14,11 +14,12 @@
  *   selectTracker() (with a temporary fallback while it returns zeros).
  */
 import { router, Stack } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/AppText';
+import { TapeLabel } from '@/components/zine/Decor';
 import { FREESTYLE_CANVAS, getPattern } from '@/fixtures/patterns';
 import { pieceAt } from '@/geometry/hitTest';
 import { SkirtPreview } from '@/features/preview3d/SkirtPreview';
@@ -36,10 +37,15 @@ import type { ProjectAction } from '@/state/actions';
 import { useProject } from '@/state/ProjectContext';
 import { applyProjectAction } from '@/state/reducer';
 import { selectTracker } from '@/state/selectors';
-import { Icon, radii, spacing, type IconName } from '@/theme';
+import { colors, Icon, lines, spacing, text, type IconName } from '@/theme';
 
 /** The quick-turn buttons in the Rotate row turn the piece this far. */
 const ROTATE_STEP_DEG = 90;
+/** How long a canvas toast stays up. */
+const TOAST_MS = 3500;
+/** New pieces are offset this far (cm) from the last one placed, cycling after a few. */
+const PLACE_STAGGER_CM = 4;
+const PLACE_STAGGER_STEPS = 5;
 /** Points sampled along a stitch line to find the pieces it joins. */
 const STITCH_SAMPLES = 40;
 
@@ -54,6 +60,19 @@ export default function Studio() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [openTool, setOpenTool] = useState<Tool | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // A short "it worked" note (e.g. after a cut). Shares the toast slot with `notice`.
+  const [snip, setSnip] = useState<string | null>(null);
+
+  // Toasts float over the canvas and clear themselves, so they never hide the
+  // selected piece's own buttons.
+  useEffect(() => {
+    if (!notice && !snip) return;
+    const t = setTimeout(() => {
+      setNotice(null);
+      setSnip(null);
+    }, TOAST_MS);
+    return () => clearTimeout(t);
+  }, [notice, snip]);
 
   const pattern = project.mode?.kind === 'pattern' ? getPattern(project.mode.patternId) : undefined;
   const canvas = pattern?.canvas ?? FREESTYLE_CANVAS;
@@ -154,6 +173,7 @@ export default function Studio() {
     if (done) {
       setOpenTool(null);
       setSelectedId(null);
+      setSnip('SNIP! Cut into 2 pieces. Select one and tap Uncut to join them back.');
     }
   };
 
@@ -197,7 +217,11 @@ export default function Studio() {
       {
         type: 'PLACE_PIECE',
         pieceId: piece.id,
-        position: { x: canvas.widthCm / 2, y: canvas.heightCm / 2 },
+        // Each new piece lands a little down-right of the last, so stacked pieces stay visible.
+        position: {
+          x: canvas.widthCm / 2 + PLACE_STAGGER_CM * (onCanvas.length % PLACE_STAGGER_STEPS),
+          y: canvas.heightCm / 2 + PLACE_STAGGER_CM * (onCanvas.length % PLACE_STAGGER_STEPS),
+        },
       },
       `${piece.displayName} can't go on the canvas.`,
     );
@@ -283,51 +307,47 @@ export default function Studio() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Back"
-          hitSlop={12}
+          hitSlop={8}
           onPress={() => router.back()}
-          style={styles.headerSide}
+          style={({ pressed }) => [styles.backButton, pressed && styles.floatingPressed]}
         >
-          <Icon name="back" size={24} color={studio.ink} />
+          <Icon name="back" size={20} color={studio.ink} />
         </Pressable>
         <View style={styles.headerTitle}>
-          <AppText variant="heading" color={studio.ink} numberOfLines={1}>
-            {title}
+          <AppText variant="heading" color={studio.ink} numberOfLines={1} style={styles.titleText}>
+            {title.toUpperCase()}
           </AppText>
-          <AppText variant="caption" color={studio.muted}>
+          <AppText variant="caption" color={studio.muted} numberOfLines={1}>
             {subtitle}
           </AppText>
         </View>
         <Pressable
           accessibilityRole="button"
-          hitSlop={12}
+          hitSlop={8}
           onPress={() => router.push('/cutting-plan')}
-          style={[styles.headerSide, styles.headerRight]}
+          style={({ pressed }) => [styles.doneButton, pressed && styles.floatingPressed]}
         >
-          <AppText variant="heading" color={studio.sage}>
-            Done
+          <AppText variant="label" color={studio.ink}>
+            DONE
           </AppText>
         </Pressable>
       </View>
 
       {/* Canvas bar */}
       <View style={styles.canvasBar}>
-        <AppText variant="caption" color={studio.muted}>
-          {pattern ? `${pattern.name} pattern` : 'Blank canvas'}
-        </AppText>
+        <TapeLabel>{pattern ? `${pattern.name.toUpperCase()} PATTERN` : 'BLANK CANVAS'}</TapeLabel>
         <View style={styles.canvasBarRight}>
           {pattern?.has3dPreview ? (
-            <Pressable hitSlop={8} onPress={() => setView(view === '2d' ? '3d' : '2d')}>
-              <AppText variant="label" color={studio.sage}>
-                {view === '2d' ? 'View in 3D' : 'Back to 2D'}
-              </AppText>
-            </Pressable>
+            <BarToggle
+              label={view === '2d' ? 'VIEW IN 3D' : 'BACK TO 2D'}
+              onPress={() => setView(view === '2d' ? '3d' : '2d')}
+            />
           ) : null}
           {pattern && view === '2d' ? (
-            <Pressable hitSlop={8} onPress={() => setShowGuide(!showGuide)}>
-              <AppText variant="label" color={studio.sage}>
-                {showGuide ? 'Hide guide' : 'Show guide'}
-              </AppText>
-            </Pressable>
+            <BarToggle
+              label={showGuide ? 'HIDE GUIDE' : 'SHOW GUIDE'}
+              onPress={() => setShowGuide(!showGuide)}
+            />
           ) : null}
         </View>
       </View>
@@ -348,55 +368,55 @@ export default function Studio() {
               dispatch({ type: 'ROTATE_PIECE', pieceId, rotationDeg })
             }
             onStroke={onStroke}
-          >
-            <View style={styles.canvasActions} pointerEvents="box-none">
-              <FloatingAction
-                label="Store"
-                icon="store"
-                disabled={!selected}
-                onPress={() =>
-                  selected &&
-                  attempt(
-                    { type: 'STORE_PIECE', pieceId: selected.id },
-                    `${selected.displayName} can't be stored right now.`,
-                  )
-                }
-              />
-              <FloatingAction
-                label="Discard"
-                icon="discard"
-                tone="danger"
-                disabled={!selected}
-                onPress={() =>
-                  selected &&
-                  attempt(
-                    { type: 'RETURN_PIECE', pieceId: selected.id },
-                    `${selected.displayName} can't be removed right now.`,
-                  )
-                }
-              />
-            </View>
-          </StudioCanvas>
+          />
         ) : (
+          // Clipped so a tall preview can never cover the canvas bar (and its Back to 2D).
           <View style={styles.preview}>
             <SkirtPreview project={project} />
           </View>
         )}
+        {notice || snip ? (
+          <View
+            style={[styles.toast, notice ? styles.toastWarn : styles.toastOk]}
+            accessibilityRole="alert"
+            accessibilityLiveRegion="polite"
+            pointerEvents="none"
+          >
+            {notice ? (
+              <AppText style={[text.heading, styles.toastMark]} color={colors.danger}>
+                !
+              </AppText>
+            ) : null}
+            <AppText
+              variant="caption"
+              color={notice ? studio.ink : colors.highlight}
+              style={styles.toastText}
+              numberOfLines={3}
+            >
+              {notice ?? snip}
+            </AppText>
+          </View>
+        ) : null}
       </View>
 
       {/* Tool row */}
       <View style={styles.tools}>
         {tools.map((t) => (
-          <ToolButton key={t.icon} {...t} />
+          // In 3D you can't see what you'd change, so editing waits for 2D.
+          <ToolButton key={t.icon} {...t} disabled={t.disabled || view === '3d'} />
         ))}
       </View>
 
       {/* Option area: a fixed height, so opening a tool never resizes the canvas */}
       <View style={styles.optionArea}>
-        {selected && tool === 'rotate' ? (
+        {view === '3d' ? (
+          <AppText variant="caption" color={studio.muted} style={styles.message}>
+            Viewing in 3D. Tap Back to 2D to keep editing.
+          </AppText>
+        ) : selected && tool === 'rotate' ? (
           <View style={styles.optionRow}>
             <StepButton
-              label="↺"
+              mirrored
               accessibilityLabel="Turn 90 degrees left"
               onPress={() =>
                 dispatch({
@@ -415,7 +435,6 @@ export default function Studio() {
               </AppText>
             </View>
             <StepButton
-              label="↻"
               accessibilityLabel="Turn 90 degrees right"
               onPress={() =>
                 dispatch({
@@ -429,13 +448,13 @@ export default function Studio() {
         ) : selected && tool === 'flip' ? (
           <View style={[styles.optionRow, styles.flipRow]}>
             <OptionButton
-              label="↔  Left to right"
+              label="↔ LEFT–RIGHT"
               onPress={() =>
                 dispatch({ type: 'FLIP_PIECE', pieceId: selected.id, axis: 'horizontal' })
               }
             />
             <OptionButton
-              label="↕  Top to bottom"
+              label="↕ TOP–BOTTOM"
               onPress={() =>
                 dispatch({ type: 'FLIP_PIECE', pieceId: selected.id, axis: 'vertical' })
               }
@@ -458,15 +477,52 @@ export default function Studio() {
               />
             ))}
           </View>
-        ) : notice || hint ? (
-          <AppText
-            variant="caption"
-            color={notice ? studio.discard : studio.muted}
-            style={styles.message}
-          >
-            {notice ?? hint}
+        ) : hint ? (
+          <View style={styles.callout}>
+            <AppText variant="caption" style={styles.calloutText} numberOfLines={2}>
+              {hint}
+            </AppText>
+          </View>
+        ) : selected ? (
+          // The selected piece's own actions live here, not floating over the canvas.
+          <View style={styles.selectedBar}>
+            <View style={styles.selectedInfo}>
+              <AppText variant="label" numberOfLines={2} style={styles.selectedName}>
+                {selected.displayName.toUpperCase()}
+              </AppText>
+              <AppText variant="caption" color={studio.muted}>
+                {formatArea(selected.areaCm2)}
+              </AppText>
+            </View>
+            <PieceAction
+              label="Store"
+              icon="store"
+              onPress={() =>
+                attempt(
+                  { type: 'STORE_PIECE', pieceId: selected.id },
+                  `${selected.displayName} can't be stored right now.`,
+                )
+              }
+            />
+            {/* Returns the piece to the pile (RETURN_PIECE); nothing is thrown away. */}
+            <PieceAction
+              label="To pile"
+              icon="restore"
+              onPress={() =>
+                attempt(
+                  { type: 'RETURN_PIECE', pieceId: selected.id },
+                  `${selected.displayName} can't be removed right now.`,
+                )
+              }
+            />
+          </View>
+        ) : (
+          <AppText variant="caption" color={studio.muted} style={styles.message}>
+            {onCanvas.length === 0
+              ? 'Tap a piece in the pile to add it to the canvas.'
+              : 'Tap a piece on the canvas to select it.'}
           </AppText>
-        ) : null}
+        )}
       </View>
 
       {/* Fabric pieces sheet: drag it down to give the canvas more room */}
@@ -474,10 +530,8 @@ export default function Studio() {
         bottomInset={insets.bottom + spacing.sm}
         header={
           <View style={styles.sheetHeader}>
-            <View>
-              <AppText variant="heading" color={studio.ink}>
-                Fabric pieces
-              </AppText>
+            <View style={styles.sheetTitle}>
+              <TapeLabel>THE PILE</TapeLabel>
               <AppText variant="caption" color={studio.muted}>
                 {formatArea(tracker.availableCm2)} available
               </AppText>
@@ -498,7 +552,11 @@ export default function Studio() {
           </View>
         }
       >
-        {tray.length === 0 ? (
+        {view === '3d' ? (
+          <AppText variant="caption" color={studio.muted} style={styles.trayEmpty}>
+            Go back to 2D to add or move pieces.
+          </AppText>
+        ) : tray.length === 0 ? (
           <AppText variant="caption" color={studio.muted} style={styles.trayEmpty}>
             Every piece is on the canvas.
           </AppText>
@@ -518,35 +576,46 @@ export default function Studio() {
   );
 }
 
-function FloatingAction({
+/** Store / To pile for the selected piece. */
+function PieceAction({
   label,
   icon,
   onPress,
-  disabled,
   tone,
 }: {
   label: string;
   icon: IconName;
   onPress: () => void;
-  disabled: boolean;
   tone?: 'danger';
 }) {
   const color = tone === 'danger' ? studio.discard : studio.ink;
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityState={{ disabled }}
-      disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [
         styles.floating,
         tone === 'danger' && { borderColor: studio.discardBorder },
-        disabled && styles.floatingDisabled,
         pressed && styles.floatingPressed,
       ]}
     >
-      <Icon name={icon} size={20} color={color} />
+      <Icon name={icon} size={18} color={color} />
       <AppText variant="label" color={color}>
+        {label.toUpperCase()}
+      </AppText>
+    </Pressable>
+  );
+}
+
+function BarToggle({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      hitSlop={8}
+      onPress={onPress}
+      style={({ pressed }) => [styles.barToggle, pressed && styles.floatingPressed]}
+    >
+      <AppText variant="label" color={studio.ink} style={styles.barToggleText}>
         {label}
       </AppText>
     </Pressable>
@@ -567,12 +636,13 @@ function OptionButton({ label, onPress }: { label: string; onPress: () => void }
   );
 }
 
+/** A quarter-turn button: the rotate icon, mirrored for turning left. */
 function StepButton({
-  label,
+  mirrored,
   accessibilityLabel,
   onPress,
 }: {
-  label: string;
+  mirrored?: boolean;
   accessibilityLabel: string;
   onPress: () => void;
 }) {
@@ -583,9 +653,9 @@ function StepButton({
       onPress={onPress}
       style={({ pressed }) => [styles.step, pressed && styles.floatingPressed]}
     >
-      <AppText variant="heading" color={studio.ink}>
-        {label}
-      </AppText>
+      <View style={mirrored ? styles.mirrored : undefined}>
+        <Icon name="rotate" size={22} color={studio.ink} />
+      </View>
     </Pressable>
   );
 }
@@ -595,79 +665,133 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.md,
+    gap: spacing.sm,
+    paddingHorizontal: spacing.sm + 4,
     paddingVertical: spacing.sm,
     backgroundColor: studio.bar,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: studio.canvasBorder,
   },
-  headerSide: { width: 56, justifyContent: 'center' },
-  headerRight: { alignItems: 'flex-end' },
+  backButton: {
+    width: 44,
+    height: 44,
+    borderWidth: lines.bold,
+    borderColor: studio.ink,
+    backgroundColor: studio.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  doneButton: {
+    height: 44,
+    paddingHorizontal: spacing.sm + 4,
+    borderWidth: lines.bold,
+    borderColor: studio.ink,
+    backgroundColor: colors.pink,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   headerTitle: { flex: 1, alignItems: 'center' },
+  titleText: { transform: [{ rotate: '-2deg' }] },
+  barToggle: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderWidth: lines.thin,
+    borderColor: studio.ink,
+    backgroundColor: colors.highlight,
+  },
+  barToggleText: { fontSize: 11, lineHeight: 14 },
+  sheetTitle: { gap: spacing.xs },
   canvasBar: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
     paddingBottom: spacing.xs,
   },
-  canvasBarRight: { flexDirection: 'row', gap: spacing.md },
+  canvasBarRight: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   canvasArea: { flex: 1, paddingHorizontal: spacing.md },
-  preview: { flex: 1, justifyContent: 'center' },
-  canvasActions: {
-    position: 'absolute',
-    left: spacing.sm,
-    right: spacing.sm,
-    bottom: spacing.sm,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
+  preview: { flex: 1, overflow: 'hidden' },
   floating: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs + 2,
-    paddingHorizontal: spacing.md - 2,
-    paddingVertical: spacing.sm + 2,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: studio.canvasBorder,
+    gap: spacing.xs,
+    minHeight: 44,
+    paddingHorizontal: spacing.sm,
+    borderWidth: lines.bold,
+    borderColor: studio.ink,
     backgroundColor: studio.card,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
   },
-  floatingDisabled: { opacity: 0.45 },
-  floatingPressed: { backgroundColor: '#EFEDE7' },
-  tools: { flexDirection: 'row', paddingHorizontal: spacing.xs, paddingVertical: spacing.sm },
-  optionArea: { height: 56, justifyContent: 'center', paddingHorizontal: spacing.lg },
+  floatingPressed: { backgroundColor: colors.highlight },
+  selectedBar: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  selectedInfo: { flex: 1 },
+  selectedName: { fontSize: 12, lineHeight: 15 },
+  callout: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    minHeight: 44,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: spacing.xs,
+    borderWidth: lines.bold,
+    borderStyle: 'dashed',
+    borderColor: studio.ink,
+  },
+  toast: {
+    position: 'absolute',
+    left: spacing.md + spacing.sm,
+    right: spacing.md + spacing.sm,
+    bottom: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.sm + 4,
+    paddingVertical: spacing.sm,
+    transform: [{ rotate: '-1deg' }],
+  },
+  // Rejected edit: white note, stamp-pink border and "!".
+  toastWarn: {
+    backgroundColor: colors.surface,
+    borderWidth: lines.heavy,
+    borderColor: colors.danger,
+  },
+  // Success: black label-maker strip with highlighter text.
+  toastOk: { backgroundColor: colors.ink },
+  toastMark: { fontSize: 22, lineHeight: 28 },
+  toastText: { flex: 1 },
+  calloutText: { flex: 1, color: studio.ink },
+  mirrored: { transform: [{ scaleX: -1 }] },
+  tools: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    paddingHorizontal: spacing.sm + 2,
+    paddingTop: spacing.sm,
+  },
+  optionArea: { height: 60, justifyContent: 'center', paddingHorizontal: spacing.md },
   optionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   swatch: {
-    width: 34,
-    height: 34,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: studio.canvasBorder,
+    width: 36,
+    height: 36,
+    borderWidth: lines.bold,
+    borderColor: studio.ink,
   },
-  swatchChosen: { borderWidth: 3, borderColor: studio.selection },
+  swatchChosen: { borderWidth: 4, borderColor: studio.selection },
   resizeInfo: { alignItems: 'center' },
   flipRow: { justifyContent: 'center', gap: spacing.sm },
   option: {
     flex: 1,
     alignItems: 'center',
     paddingVertical: spacing.sm + 2,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: studio.canvasBorder,
+    borderWidth: lines.bold,
+    borderColor: studio.ink,
     backgroundColor: studio.card,
   },
   step: {
     width: 44,
     height: 44,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: studio.canvasBorder,
+    borderWidth: lines.bold,
+    borderColor: studio.ink,
     backgroundColor: studio.card,
     alignItems: 'center',
     justifyContent: 'center',
@@ -683,12 +807,18 @@ const styles = StyleSheet.create({
   usage: { alignItems: 'flex-end', gap: spacing.xs, paddingTop: spacing.xs },
   track: {
     width: 150,
-    height: 6,
-    borderRadius: 3,
+    height: 14,
+    borderWidth: lines.bold,
+    borderColor: studio.ink,
     backgroundColor: studio.track,
     overflow: 'hidden',
   },
-  fill: { height: '100%', backgroundColor: studio.sage },
+  fill: {
+    height: '100%',
+    backgroundColor: colors.highlight,
+    borderRightWidth: lines.bold,
+    borderRightColor: studio.ink,
+  },
   cards: { paddingHorizontal: spacing.md, paddingTop: spacing.sm, gap: spacing.xs },
   trayEmpty: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
 });
