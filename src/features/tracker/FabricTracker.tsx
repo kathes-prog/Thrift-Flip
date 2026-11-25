@@ -7,7 +7,7 @@
 import { StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/AppText';
-import { StubBanner } from '@/components/StubBanner';
+import { Card } from '@/components/Card';
 import { formatArea } from '@/model/units';
 import { selectTracker } from '@/state/selectors';
 import { useProject } from '@/state/ProjectContext';
@@ -34,33 +34,15 @@ export function FabricTracker({ showStub = true }: { showStub?: boolean } = {}) 
   if (t.discardedCm2 > 0) cells.push({ label: 'DISCARDED', value: formatArea(t.discardedCm2) });
 
   return (
-    <View style={styles.wrap}>
-      {showStub ? (
-        <StubBanner owner="P1" note="Selectors return zeros until P1 builds them." />
-      ) : null}
-      <View style={styles.box} accessibilityLabel="Fabric tracker">
-        {cells.map((c, i) => (
-          <View
-            key={c.label}
-            style={[styles.cell, i > 0 && styles.divider, c.hot && styles.hot]}
-            accessible
-            accessibilityLabel={`${c.label} ${c.value}`}
-          >
-            <AppText variant="kicker" style={styles.cellLabel}>
-              {c.label}
-            </AppText>
-            <AppText
-              variant="heading"
-              style={styles.cellValue}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-            >
-              {c.value}
-            </AppText>
-          </View>
-        ))}
-      </View>
-    </View>
+    <Card>
+      <AppText variant="heading">Fabric tracker</AppText>
+      {rows.map(([label, value]) => (
+        <View key={label} style={styles.row}>
+          <AppText color={colors.inkMuted}>{label}</AppText>
+          <AppText variant="bodyStrong">{value}</AppText>
+        </View>
+      ))}
+    </Card>
   );
 }
 

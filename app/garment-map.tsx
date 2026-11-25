@@ -9,82 +9,88 @@ import { StyleSheet, View } from 'react-native';
 import { AppText } from '@/components/AppText';
 import { Button } from '@/components/Button';
 import { Screen } from '@/components/Screen';
-import { StubBanner } from '@/components/StubBanner';
-import { TapeLabel } from '@/components/zine/Decor';
-import { TornPaper } from '@/components/zine/TornPaper';
+import type { FabricPiece, PieceCategory } from '@/model/types';
 import { formatArea } from '@/model/units';
 import { useProject } from '@/state/ProjectContext';
-import { colors, spacing, text, tiltAt } from '@/theme';
+import { colors, spacing } from '@/theme';
+
+function pieceSize(piece: FabricPiece): string {
+  const xs = piece.polygon.map(({ x }) => x);
+  const ys = piece.polygon.map(({ y }) => y);
+  const width = Math.max(...xs) - Math.min(...xs);
+  const length = Math.max(...ys) - Math.min(...ys);
+  return `${Number(width.toFixed(1))} × ${Number(length.toFixed(1))} cm`;
+}
 
 export default function GarmentMap() {
   const { project } = useProject();
-  const totalCm2 = project.pieces.reduce((sum, p) => sum + p.areaCm2, 0);
+  const garmentLimitReached = project.sources.some(
+    (source) => source.type === 'additional-garment',
+  );
 
   return (
-    <Screen
-      kicker="Step 2/4 · your jeans"
-      title="Garment map"
-      highlight="garment"
-      footer={<Button label="Start designing →" onPress={() => router.push('/start')} />}
-    >
-      <StubBanner
-        owner="P1"
-        note="Grouped counts, dimensions, sample-analysis label, Add garment and Add scrap."
-      />
-
+    <Screen title="Garment Map">
       {project.sources.length === 0 ? (
         <AppText color={colors.inkMuted}>
           No garments yet. Load a preset from Dev fixtures to see sample data.
         </AppText>
-      ) : (
-        <View style={styles.total}>
-          {/* Bowlby One has no ² glyph, so the unit is set in the typewriter font. */}
-          <AppText style={[text.display, styles.totalNumber]}>
-            {formatArea(totalCm2).replace(/\s*cm²$/, '')}
-          </AppText>
-          <AppText variant="bodyStrong">cm² of denim saved from the landfill</AppText>
-          <TapeLabel tone="pink" style={styles.count}>
-            {`${project.pieces.length} PIECES ↓`}
-          </TapeLabel>
-        </View>
-      )}
+      ) : null}
+      {project.sources.map((source) => {
+        const pieces = project.pieces.filter((piece) => piece.sourceId === source.id);
+        const groups = new Map<PieceCategory, FabricPiece[]>();
+        for (const piece of pieces) {
+          const group = groups.get(piece.category);
+          if (group) group.push(piece);
+          else groups.set(piece.category, [piece]);
+        }
 
-      {project.sources.map((source) => (
-        <View key={source.id} style={styles.source}>
-          <View style={styles.sourceHead}>
-            <View style={[styles.swatch, { backgroundColor: source.shade }]} />
-            <AppText variant="heading">{source.displayName.toUpperCase()}</AppText>
-          </View>
-          {project.pieces
-            .filter((p) => p.sourceId === source.id)
-            .map((piece, i) => (
-              <TornPaper
-                key={piece.id}
-                seed={i * 3}
-                tilt={tiltAt(i) * 0.6}
-                color={i % 4 === 2 ? colors.highlight : colors.surface}
-                style={i % 2 ? styles.stripIndent : undefined}
-              >
-                <View style={styles.pieceRow}>
-                  <AppText style={styles.pieceName}>{piece.displayName}</AppText>
-                  <AppText variant="bodyStrong">{formatArea(piece.areaCm2)}</AppText>
-                </View>
-              </TornPaper>
+        return (
+          <Card key={source.id}>
+            <View style={styles.row}>
+              <View style={[styles.dot, { backgroundColor: source.shade }]} />
+              <AppText variant="heading">{source.displayName}</AppText>
+            </View>
+            <AppText color={colors.inkMuted}>
+              {pieces.length} {pieces.length === 1 ? 'piece' : 'pieces'} ·{' '}
+              {formatArea(pieces.reduce((area, piece) => area + piece.areaCm2, 0))}
+              {source.isSampleAnalysis ? ' · Sample analysis' : ''}
+            </AppText>
+            {[...groups].map(([category, group]) => (
+              <View key={category} style={styles.group}>
+                <AppText variant="bodyStrong" style={styles.category}>
+                  {category.replace(/-/g, ' ')} ({group.length})
+                </AppText>
+                {group.map((piece) => (
+                  <AppText key={piece.id} color={colors.inkMuted}>
+                    {piece.displayName} · {pieceSize(piece)} · {formatArea(piece.areaCm2)}
+                  </AppText>
+                ))}
+              </View>
             ))}
-        </View>
-      ))}
+          </Card>
+        );
+      })}
+      <Button
+        label="Add garment"
+        icon="add"
+        variant="secondary"
+        disabled={garmentLimitReached}
+        onPress={() => router.push({ pathname: '/new-garment', params: { from: 'materials' } })}
+      />
+      <Button
+        label="Add scrap"
+        icon="scrap"
+        variant="secondary"
+        onPress={() => router.push({ pathname: '/patterns', params: { add: 'scrap' } })}
+      />
+      <Button label="Start designing" icon="pattern" onPress={() => router.push('/start')} />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  total: { gap: 2, transform: [{ rotate: '-1.5deg' }] },
-  totalNumber: { color: colors.ink },
-  count: { marginTop: spacing.sm },
-  source: { gap: spacing.sm },
-  sourceHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  swatch: { width: 18, height: 18 },
-  stripIndent: { marginLeft: spacing.sm },
-  pieceRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm },
-  pieceName: { flex: 1 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  dot: { width: 14, height: 14, borderRadius: 7 },
+  group: { gap: spacing.xs },
+  category: { textTransform: 'capitalize' },
 });

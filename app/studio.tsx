@@ -14,7 +14,7 @@
  *   selectTracker() (with a temporary fallback while it returns zeros).
  */
 import { router, Stack } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -29,7 +29,7 @@ import { PieceCard } from '@/features/studio/PieceCard';
 import { PieceDrawer } from '@/features/studio/PieceDrawer';
 import { StudioCanvas, type CanvasTool } from '@/features/studio/StudioCanvas';
 import { studio } from '@/features/studio/studioStyle';
-import { fallbackTotals, testPieceProject } from '@/features/studio/testPieces';
+import { fallbackTotals } from '@/features/studio/testPieces';
 import { ToolButton } from '@/features/studio/ToolButton';
 import type { FabricPiece } from '@/model/types';
 import { formatArea, type Point } from '@/model/units';
@@ -83,12 +83,14 @@ export default function Studio() {
   const tracker = p1Tracker.recoveredCm2 > 0 ? p1Tracker : fallbackTotals(project);
 
   // TEMP: give an empty project the sample pieces so every tool can be tried.
-  const isEmpty = project.pieces.length === 0;
-  useEffect(() => {
-    if (!isEmpty) return;
-    const sample = testPieceProject(project);
-    if (sample) dispatch({ type: 'LOAD_PROJECT', project: sample });
-  }, [isEmpty, project, dispatch]);
+  // To use this again, re-add useEffect to the 'react' import and
+  // testPieceProject to the '@/features/studio/testPieces' import.
+  // const isEmpty = project.pieces.length === 0;
+  // useEffect(() => {
+  //   if (!isEmpty) return;
+  //   const sample = testPieceProject(project);
+  //   if (sample) dispatch({ type: 'LOAD_PROJECT', project: sample });
+  // }, [isEmpty, project, dispatch]);
 
   // A selection only counts while that piece is on the canvas (undo or a cut can remove it).
   const selected = onCanvas.find((p) => p.id === selectedId);

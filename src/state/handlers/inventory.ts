@@ -12,30 +12,36 @@
  *
  * Return the SAME project object when nothing changes.
  */
-import type { Project } from '@/model/types';
+import type { FabricPiece, Project } from '@/model/types';
 
 import type { InventoryAction } from '../actions';
 
 export function handleInventoryAction(project: Project, action: InventoryAction): Project {
+  const index = project.pieces.findIndex((piece) => piece.id === action.pieceId);
+  const piece = project.pieces[index];
+  if (!piece) return project;
+
+  let updatedPiece: FabricPiece;
   switch (action.type) {
-    case 'PLACE_PIECE': {
-      // TEMP(P2): bare tray -> canvas so the Studio works with test pieces.
-      // TODO(P1): replace with the full eligibility rules above.
-      const index = project.pieces.findIndex((p) => p.id === action.pieceId);
-      const piece = project.pieces[index];
-      if (!piece || piece.status !== 'tray') return project;
-      const pieces = [...project.pieces];
-      pieces[index] = { ...piece, status: 'canvas', position: action.position };
-      return { ...project, pieces };
-    }
+    case 'PLACE_PIECE':
+      if (piece.status !== 'tray') return project;
+      updatedPiece = { ...piece, status: 'canvas', position: action.position };
+      break;
     case 'STORE_PIECE':
-      // TODO(P1)
-      return project;
+      if (piece.status !== 'canvas') return project;
+      updatedPiece = { ...piece, status: 'stored' };
+      break;
     case 'RESTORE_PIECE':
-      // TODO(P1)
-      return project;
+      if (piece.status !== 'stored') return project;
+      updatedPiece = { ...piece, status: 'tray' };
+      break;
     case 'DISCARD_PIECE':
-      // TODO(P1)
-      return project;
+      if (piece.status === 'discarded') return project;
+      updatedPiece = { ...piece, status: 'discarded' };
+      break;
   }
+
+  const pieces = [...project.pieces];
+  pieces[index] = updatedPiece;
+  return { ...project, pieces };
 }
