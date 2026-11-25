@@ -7,14 +7,12 @@
 import { StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/AppText';
-import { Card } from '@/components/Card';
 import { formatArea } from '@/model/units';
 import { selectTracker } from '@/state/selectors';
 import { useProject } from '@/state/ProjectContext';
 import { colors, fonts, lines, spacing } from '@/theme';
 
-/** `showStub`: pass false where the screen already shows a stub banner for P1. */
-export function FabricTracker({ showStub = true }: { showStub?: boolean } = {}) {
+export function FabricTracker() {
   const { project } = useProject();
   const t = selectTracker(project);
   // With nothing recovered yet, show dashes rather than a row of "0 cm²" that
@@ -34,15 +32,30 @@ export function FabricTracker({ showStub = true }: { showStub?: boolean } = {}) 
   if (t.discardedCm2 > 0) cells.push({ label: 'DISCARDED', value: formatArea(t.discardedCm2) });
 
   return (
-    <Card>
-      <AppText variant="heading">Fabric tracker</AppText>
-      {rows.map(([label, value]) => (
-        <View key={label} style={styles.row}>
-          <AppText color={colors.inkMuted}>{label}</AppText>
-          <AppText variant="bodyStrong">{value}</AppText>
-        </View>
-      ))}
-    </Card>
+    <View style={styles.wrap}>
+      <View style={styles.box} accessibilityLabel="Fabric tracker">
+        {cells.map((c, i) => (
+          <View
+            key={c.label}
+            style={[styles.cell, i > 0 && styles.divider, c.hot && styles.hot]}
+            accessible
+            accessibilityLabel={`${c.label} ${c.value}`}
+          >
+            <AppText variant="kicker" style={styles.cellLabel}>
+              {c.label}
+            </AppText>
+            <AppText
+              variant="heading"
+              style={styles.cellValue}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+            >
+              {c.value}
+            </AppText>
+          </View>
+        ))}
+      </View>
+    </View>
   );
 }
 
